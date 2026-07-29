@@ -21,12 +21,18 @@ class SyncService {
       return { success: false, sku, message: "SKU no encontrado en Bsale" };
     }
 
-    // Verificar que tenemos productId
-    const productId = variant.productId || variant.product_id;
+    // Verificar que tenemos productId (puede estar en variant.product o variant.productId)
+    const productId = variant.product?.id || variant.productId || variant.product_id;
     if (!productId) {
-      logger.error("Variante encontrada pero sin productId", { sku, variantKeys: Object.keys(variant) });
+      logger.error("Variante encontrada pero sin productId", { 
+        sku, 
+        variantKeys: Object.keys(variant),
+        product: variant.product
+      });
       return { success: false, sku, message: "Variante sin productId asociado en Bsale" };
     }
+    
+    logger.info("Variante válida encontrada", { sku, variantId: variant.id, productId });
 
     // 2. Buscar descripción web existente
     let webProduct = await bsaleClient.findWebProductByCode(sku);
