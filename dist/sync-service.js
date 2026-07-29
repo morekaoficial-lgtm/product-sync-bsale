@@ -79,6 +79,10 @@ class SyncService {
                 addToHistory(result);
                 return result;
             }
+            // Guardar en cache para actualizaciones inmediatas
+            if (created.id) {
+                bsaleClient.cacheWebProductId(sku, created.id);
+            }
             const result = { success: true, sku, message: "Descripción web creada exitosamente", bsaleWebProductId: created.id, created: true };
             addToHistory(result);
             return result;
@@ -108,6 +112,10 @@ class SyncService {
             bsaleWebProductId: webProduct.id,
             activated: webProduct.state === 0,
         };
+        // Guardar en cache para futuras actualizaciones
+        if (webProduct.id) {
+            bsaleClient.cacheWebProductId(sku, webProduct.id);
+        }
         addToHistory(result);
         return result;
     }
@@ -195,6 +203,10 @@ class SyncService {
             bsaleWebProductId: webProduct.id,
             activated: webProduct.state === 0,
         };
+        // Guardar en cache para futuras actualizaciones
+        if (webProduct.id) {
+            bsaleClient.cacheWebProductId(sku, webProduct.id);
+        }
         addToHistory(result);
         return result;
     }

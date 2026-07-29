@@ -23,6 +23,19 @@ class BsaleClient {
     access_token: config.bsale.accessToken,
   };
 
+  // Cache de productId web por SKU (para actualizaciones inmediatas)
+  private webProductIdCache = new Map<string, number>();
+
+  /** Guardar ID de producto web en cache */
+  cacheWebProductId(sku: string, webProductId: number) {
+    this.webProductIdCache.set(sku, webProductId);
+  }
+
+  /** Obtener ID de producto web del cache */
+  getCachedWebProductId(sku: string): number | undefined {
+    return this.webProductIdCache.get(sku);
+  }
+
   /** Buscar variante por código (SKU) */
   async findVariantByCode(code: string): Promise<any | null> {
     const url = `${BSALE_API_BASE}/variants.json?code=${encodeURIComponent(code)}`;
@@ -44,9 +57,17 @@ class BsaleClient {
     }
   }
 
-  /** Buscar descripción web por código de variante */
+  /** Buscar descripción web por código de variante (API v2) */
   async findWebProductByCode(code: string): Promise<any | null> {
-    const url = `${BSALE_API_BASE}/products/market_info.json?code=${encodeURIComponent(code)}`;
+    // 1. Revisar cache primero
+    const cachedId = this.webProductIdCache.get(code);
+    if (cachedId) {
+      logger.info("Bsale web product found in cache", { code, webProductId: cachedId });
+      return { id: cachedId };
+    }
+
+    // 2. Endpoint v2 para listar productos web por código de variante
+    const url = `${BSALE_API_V2}/products/list/market_info.json?code=${encodeURIComponent(code)}`;
     try {
       const res = await fetchWithTimeout(url, { headers: this.headers });
       if (!res.ok) {
@@ -54,7 +75,12 @@ class BsaleClient {
         return null;
       }
       const data = await res.json();
-      return data.items?.[0] || null;
+      // La respuesta v2 tiene formato: { code: "200", data: [ {...} ], count: 1 }
+      const items = data.data || data.items || [];
+      if (items.length > 0) {
+        logger.info("Bsale web product found", { code, webProductId: items[0].id });
+      }
+      return items[0] || null;
     } catch (err: any) {
       logger.error("Bsale findWebProduct timeout/error", { code, error: err.message });
       return null;
@@ -76,7 +102,11 @@ class BsaleClient {
         logger.error("Bsale createWebProduct error", { status: res.status, text });
         return null;
       }
-      return res.json();
+      const data = await res.json();
+      // La respuesta tiene formato: { code: 200, data: { id: 57, ... } }
+      const webProduct = data.data || data;
+      logger.info("Bsale createWebProduct success", { webProductId: webProduct?.id });
+      return webProduct;
     } catch (err: any) {
       logger.error("Bsale createWebProduct timeout/error", { error: err.message });
       return null;
