@@ -1,13 +1,24 @@
 import { bsaleClient } from "./bsale-client.js";
 import { shopifyClient } from "./shopify-client.js";
 import { logger } from "./logger.js";
+// Historial en memoria (limitado a 500 entradas)
+export const syncHistory = [];
+const MAX_HISTORY = 500;
+function addToHistory(result) {
+    syncHistory.push({ ...result, timestamp: new Date().toISOString() });
+    if (syncHistory.length > MAX_HISTORY) {
+        syncHistory.shift();
+    }
+}
 class SyncService {
     async syncBySKU(sku) {
         logger.info("Iniciando sync por SKU", { sku });
         // 1. Buscar variante en Bsale
         const variant = await bsaleClient.findVariantByCode(sku);
         if (!variant) {
-            return { success: false, sku, message: "SKU no encontrado en Bsale" };
+            const result = { success: false, sku, message: "SKU no encontrado en Bsale" };
+            addToHistory(result);
+            return result;
         }
         // Verificar que tenemos productId (puede estar en variant.product o variant.productId)
         const productId = variant.product?.id || variant.productId || variant.product_id;
@@ -17,7 +28,9 @@ class SyncService {
                 variantKeys: Object.keys(variant),
                 product: variant.product
             });
-            return { success: false, sku, message: "Variante sin productId asociado en Bsale" };
+            const result = { success: false, sku, message: "Variante sin productId asociado en Bsale" };
+            addToHistory(result);
+            return result;
         }
         logger.info("Variante válida encontrada", { sku, variantId: variant.id, productId });
         // 2. Buscar descripción web existente
@@ -76,31 +89,41 @@ class SyncService {
             logger.info("Descripción web no existe, creando...", { sku, productId });
             const created = await bsaleClient.createWebProduct(payload);
             if (!created) {
-                return { success: false, sku, message: "Error creando descripción web en Bsale" };
+                const result = { success: false, sku, message: "Error creando descripción web en Bsale" };
+                addToHistory(result);
+                return result;
             }
-            return { success: true, sku, message: "Descripción web creada exitosamente", bsaleWebProductId: created.id, created: true };
+            const result = { success: true, sku, message: "Descripción web creada exitosamente", bsaleWebProductId: created.id, created: true };
+            addToHistory(result);
+            return result;
         }
         // 6. Activar si está inactiva
         if (webProduct.state === 0) {
             logger.info("Descripción web inactiva, activando...", { sku, webProductId: webProduct.id });
             const activated = await bsaleClient.activateWebProduct(webProduct.id);
             if (!activated) {
-                return { success: false, sku, message: "Error activando descripción web" };
+                const result = { success: false, sku, message: "Error activando descripción web" };
+                addToHistory(result);
+                return result;
             }
         }
         // 7. Actualizar imágenes y descripción
         logger.info("Actualizando descripción web", { sku, webProductId: webProduct.id });
         const updated = await bsaleClient.updateWebProduct(webProduct.id, payload);
         if (!updated) {
-            return { success: false, sku, message: "Error actualizando descripción web" };
+            const result = { success: false, sku, message: "Error actualizando descripción web" };
+            addToHistory(result);
+            return result;
         }
-        return {
+        const result = {
             success: true,
             sku,
             message: webProduct.state === 0 ? "Descripción web activada y actualizada" : "Descripción web actualizada",
             bsaleWebProductId: webProduct.id,
             activated: webProduct.state === 0,
         };
+        addToHistory(result);
+        return result;
     }
 }
 export const syncService = new SyncService();

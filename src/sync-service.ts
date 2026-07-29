@@ -11,6 +11,21 @@ export interface SyncResult {
   activated?: boolean;
 }
 
+export interface SyncHistoryItem extends SyncResult {
+  timestamp: string;
+}
+
+// Historial en memoria (limitado a 500 entradas)
+export const syncHistory: SyncHistoryItem[] = [];
+const MAX_HISTORY = 500;
+
+function addToHistory(result: SyncResult) {
+  syncHistory.push({ ...result, timestamp: new Date().toISOString() });
+  if (syncHistory.length > MAX_HISTORY) {
+    syncHistory.shift();
+  }
+}
+
 class SyncService {
   async syncBySKU(sku: string): Promise<SyncResult> {
     logger.info("Iniciando sync por SKU", { sku });
@@ -18,7 +33,9 @@ class SyncService {
     // 1. Buscar variante en Bsale
     const variant = await bsaleClient.findVariantByCode(sku);
     if (!variant) {
-      return { success: false, sku, message: "SKU no encontrado en Bsale" };
+      const result = { success: false, sku, message: "SKU no encontrado en Bsale" };
+      addToHistory(result);
+      return result;
     }
 
     // Verificar que tenemos productId (puede estar en variant.product o variant.productId)
@@ -29,7 +46,9 @@ class SyncService {
         variantKeys: Object.keys(variant),
         product: variant.product
       });
-      return { success: false, sku, message: "Variante sin productId asociado en Bsale" };
+      const result = { success: false, sku, message: "Variante sin productId asociado en Bsale" };
+      addToHistory(result);
+      return result;
     }
     
     logger.info("Variante válida encontrada", { sku, variantId: variant.id, productId });
@@ -94,9 +113,13 @@ class SyncService {
       logger.info("Descripción web no existe, creando...", { sku, productId });
       const created = await bsaleClient.createWebProduct(payload);
       if (!created) {
-        return { success: false, sku, message: "Error creando descripción web en Bsale" };
+        const result = { success: false, sku, message: "Error creando descripción web en Bsale" };
+        addToHistory(result);
+        return result;
       }
-      return { success: true, sku, message: "Descripción web creada exitosamente", bsaleWebProductId: created.id, created: true };
+      const result = { success: true, sku, message: "Descripción web creada exitosamente", bsaleWebProductId: created.id, created: true };
+      addToHistory(result);
+      return result;
     }
 
     // 6. Activar si está inactiva
@@ -104,7 +127,9 @@ class SyncService {
       logger.info("Descripción web inactiva, activando...", { sku, webProductId: webProduct.id });
       const activated = await bsaleClient.activateWebProduct(webProduct.id);
       if (!activated) {
-        return { success: false, sku, message: "Error activando descripción web" };
+        const result = { success: false, sku, message: "Error activando descripción web" };
+        addToHistory(result);
+        return result;
       }
     }
 
@@ -112,16 +137,20 @@ class SyncService {
     logger.info("Actualizando descripción web", { sku, webProductId: webProduct.id });
     const updated = await bsaleClient.updateWebProduct(webProduct.id, payload);
     if (!updated) {
-      return { success: false, sku, message: "Error actualizando descripción web" };
+      const result = { success: false, sku, message: "Error actualizando descripción web" };
+      addToHistory(result);
+      return result;
     }
 
-    return {
+    const result = {
       success: true,
       sku,
       message: webProduct.state === 0 ? "Descripción web activada y actualizada" : "Descripción web actualizada",
       bsaleWebProductId: webProduct.id,
       activated: webProduct.state === 0,
     };
+    addToHistory(result);
+    return result;
   }
 }
 

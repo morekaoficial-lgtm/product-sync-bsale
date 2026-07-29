@@ -3,6 +3,7 @@ import cors from "cors";
 import { config, validateConfig } from "./config.js";
 import { logger } from "./logger.js";
 import routes from "./routes.js";
+import { getAdminDashboardHTML } from "./admin-dashboard.js";
 
 validateConfig();
 
@@ -18,9 +19,17 @@ app.use((req, _res, next) => {
   next();
 });
 
-// Rutas
+// Panel de administración
+app.get("/admin", (_req, res) => {
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(getAdminDashboardHTML());
+});
+
+// Rutas API
 app.use("/webhook", routes);
 app.use("/sync", routes);
+app.use("/api", routes);
+
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", service: "product-sync-bsale", port: PORT });
 });
@@ -36,6 +45,7 @@ app.use((err: any, _req: any, res: any, _next: any) => {
 
 app.listen(PORT, () => {
   logger.info(`🚀 Product Sync Bsale corriendo en puerto ${PORT}`);
+  logger.info(`🎛️  Admin panel:     GET  http://localhost:${PORT}/admin`);
   logger.info(`📡 Webhook Shopify: POST http://localhost:${PORT}/webhook/shopify`);
   logger.info(`🔄 Sync manual:     POST http://localhost:${PORT}/sync/sku`);
   logger.info(`🏥 Health check:    GET  http://localhost:${PORT}/health`);

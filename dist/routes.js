@@ -1,7 +1,14 @@
 import { Router } from "express";
-import { syncService } from "./sync-service.js";
+import { syncService, syncHistory } from "./sync-service.js";
 import { logger } from "./logger.js";
 const router = Router();
+/**
+ * GET /api/history
+ * Devuelve el historial de sincronizaciones en JSON.
+ */
+router.get("/history", (_req, res) => {
+    res.json(syncHistory);
+});
 /**
  * POST /webhook/shopify
  * Recibe webhooks de Shopify cuando un producto se crea o actualiza.
