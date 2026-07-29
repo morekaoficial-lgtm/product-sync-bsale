@@ -56,7 +56,7 @@ class SyncService {
             name: title,
             description: description || "",
             urlImg: images[0] || "",
-            urlVideo: null,
+            urlVideo: "null",
             displayNotice: " ",
             variantShippingAll: 1,
             order: 1,
