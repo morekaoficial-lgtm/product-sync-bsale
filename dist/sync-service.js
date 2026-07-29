@@ -56,9 +56,9 @@ class SyncService {
             state: 1,
             productType: "normal",
             variantShippingAll: 1,
-            displayNotice: 0,
-            displayQuantity: 0,
-            displayUnit: 0,
+            displayNotice: "0",
+            displayQuantity: "0",
+            displayUnit: "0",
         };
         // 5. Crear si no existe
         if (!webProduct) {
