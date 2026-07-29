@@ -55,28 +55,31 @@ class SyncService {
       logger.warn("Error buscando en Shopify, usando datos de Bsale", { sku, error: err.message });
     }
 
-    // 4. Construir payload
+    // 4. Construir pictures
     const pictures = images.map((url: string, idx: number) => ({
       href: url,
       legendImage: "",
       order: idx,
     }));
 
+    // Asegurar tipos numéricos (la API v2 de Bsale es estricta)
+    const numericProductId = Number(productId);
+    const numericVariantId = Number(variant.id);
+
+    // Construir payload EXACTO según documentación Bsale v2
     const payload = {
-      productId: productId,
-      idVariantDefault: variant.id,
+      productId: numericProductId,
+      idVariantDefault: numericVariantId,
       name: title,
-      description: description,
+      description: description || "",
       urlImg: images[0] || "",
-      pictures: pictures,
+      urlVideo: "null",
+      displayNotice: "",
+      variantShippingAll: 1,
+      order: 1,
       state: 1,
       productType: "normal",
-      variantShippingAll: 1,
-      displayNotice: "0",
-      displayQuantity: "0",
-      displayUnit: "0",
-      order: 0,
-      available: 1,
+      pictures: pictures,
     };
 
     // 5. Crear si no existe
