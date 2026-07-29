@@ -2,6 +2,19 @@ import { config } from "./config.js";
 import { logger } from "./logger.js";
 
 const API_VERSION = "2025-10";
+const REQUEST_TIMEOUT = 10000; // 10 segundos
+
+/** Helper: fetch con timeout */
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = REQUEST_TIMEOUT): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    return res;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 class ShopifyClient {
   private shopDomain: string;
@@ -24,13 +37,18 @@ class ShopifyClient {
   /** Obtener producto por ID (con imágenes y descripción) */
   async getProduct(productId: number): Promise<any | null> {
     const url = `https://${this.shopDomain}/admin/api/${API_VERSION}/products/${productId}.json`;
-    const res = await fetch(url, { headers: this.headers() });
-    if (!res.ok) {
-      logger.error("Shopify getProduct error", { productId, status: res.status });
+    try {
+      const res = await fetchWithTimeout(url, { headers: this.headers() });
+      if (!res.ok) {
+        logger.error("Shopify getProduct error", { productId, status: res.status });
+        return null;
+      }
+      const data = await res.json();
+      return data.product;
+    } catch (err: any) {
+      logger.error("Shopify getProduct timeout/error", { productId, error: err.message });
       return null;
     }
-    const data = await res.json();
-    return data.product;
   }
 
   /** Buscar producto por SKU vía GraphQL */
@@ -49,15 +67,27 @@ class ShopifyClient {
       }
     `;
     const url = `https://${this.shopDomain}/admin/api/${API_VERSION}/graphql.json`;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: this.headers(),
-      body: JSON.stringify({ query }),
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const edges = data?.data?.productVariants?.edges || [];
-    return edges[0]?.node?.product || null;
+    try {
+      const res = await fetchWithTimeout(url, {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify({ query }),
+      });
+      if (!res.ok) {
+        logger.error("Shopify findProductBySKU error", { sku, status: res.status });
+        return null;
+      }
+      const data = await res.json();
+      if (data.errors) {
+        logger.error("Shopify GraphQL errors", { sku, errors: data.errors });
+        return null;
+      }
+      const edges = data?.data?.productVariants?.edges || [];
+      return edges[0]?.node?.product || null;
+    } catch (err: any) {
+      logger.error("Shopify findProductBySKU timeout/error", { sku, error: err.message });
+      return null;
+    }
   }
 }
 

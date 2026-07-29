@@ -2,14 +2,6 @@ import { bsaleClient } from "./bsale-client.js";
 import { shopifyClient } from "./shopify-client.js";
 import { logger } from "./logger.js";
 class SyncService {
-    /**
-     * Sincroniza un producto de Shopify a Bsale Web buscando por SKU.
-     * 1. Busca SKU en Bsale (variante)
-     * 2. Busca si ya tiene descripción web
-     * 3. Si no existe → la crea
-     * 4. Si está inactiva (state=0) → la activa
-     * 5. Si está activa → actualiza imágenes + descripción
-     */
     async syncBySKU(sku) {
         logger.info("Iniciando sync por SKU", { sku });
         // 1. Buscar variante en Bsale
@@ -17,13 +9,32 @@ class SyncService {
         if (!variant) {
             return { success: false, sku, message: "SKU no encontrado en Bsale" };
         }
+        // Verificar que tenemos productId
+        const productId = variant.productId || variant.product_id;
+        if (!productId) {
+            logger.error("Variante encontrada pero sin productId", { sku, variantKeys: Object.keys(variant) });
+            return { success: false, sku, message: "Variante sin productId asociado en Bsale" };
+        }
         // 2. Buscar descripción web existente
         let webProduct = await bsaleClient.findWebProductByCode(sku);
         // 3. Buscar producto en Shopify para obtener datos
-        const shopifyProduct = await shopifyClient.findProductBySKU(sku);
-        const description = shopifyProduct?.descriptionHtml || shopifyProduct?.body_html || "";
-        const images = shopifyProduct?.images?.edges?.map((e) => e.node.src) || [];
-        const title = shopifyProduct?.title || variant.name || sku;
+        let description = "";
+        let images = [];
+        let title = variant.name || sku;
+        try {
+            const shopifyProduct = await shopifyClient.findProductBySKU(sku);
+            if (shopifyProduct) {
+                description = shopifyProduct.descriptionHtml || shopifyProduct.body_html || "";
+                images = shopifyProduct.images?.edges?.map((e) => e.node.src) || [];
+                title = shopifyProduct.title || title;
+            }
+            else {
+                logger.warn("Producto no encontrado en Shopify, usando datos de Bsale", { sku });
+            }
+        }
+        catch (err) {
+            logger.warn("Error buscando en Shopify, usando datos de Bsale", { sku, error: err.message });
+        }
         // 4. Construir payload
         const pictures = images.map((url, idx) => ({
             href: url,
@@ -31,7 +42,7 @@ class SyncService {
             order: idx,
         }));
         const payload = {
-            productId: variant.productId,
+            productId: productId,
             idVariantDefault: variant.id,
             name: title,
             description: description,
@@ -43,7 +54,7 @@ class SyncService {
         };
         // 5. Crear si no existe
         if (!webProduct) {
-            logger.info("Descripción web no existe, creando...", { sku, productId: variant.productId });
+            logger.info("Descripción web no existe, creando...", { sku, productId });
             const created = await bsaleClient.createWebProduct(payload);
             if (!created) {
                 return { success: false, sku, message: "Error creando descripción web en Bsale" };
