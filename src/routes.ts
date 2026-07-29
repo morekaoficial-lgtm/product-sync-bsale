@@ -65,4 +65,25 @@ router.post("/sku", async (req, res) => {
   }
 });
 
+/**
+ * POST /sync/sku/update
+ * Fuerza actualización de un producto que YA tiene descripción web.
+ * Body: { sku: string }
+ */
+router.post("/sku/update", async (req, res) => {
+  try {
+    const { sku } = req.body;
+    if (!sku) {
+      return res.status(400).json({ success: false, message: "sku es requerido" });
+    }
+
+    logger.info("Actualización forzada por SKU solicitada", { sku });
+    const result = await syncService.forceUpdateBySKU(sku);
+    res.status(result.success ? 200 : 404).json(result);
+  } catch (error: any) {
+    logger.error("Error en actualización forzada", { error: error.message });
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 export default router;

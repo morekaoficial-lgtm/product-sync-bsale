@@ -43,19 +43,21 @@ export function getAdminDashboardHTML(): string {
     }
     .card h2 { font-size: 0.875rem; font-weight: 600; color: #94a3b8; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.05em; }
 
-    .sync-form { display: flex; gap: 12px; align-items: stretch; }
+    .sync-form { display: flex; gap: 12px; align-items: stretch; margin-bottom: 12px; }
     .sync-form input {
       flex: 1; padding: 12px 16px; background: #0f172a; border: 1px solid #475569;
       border-radius: 8px; color: #f8fafc; font-size: 1rem;
     }
     .sync-form input:focus { outline: none; border-color: #3b82f6; }
-    .sync-form button {
-      padding: 12px 24px; background: #3b82f6; color: white;
-      border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
-      transition: background 0.2s;
+    .btn {
+      padding: 12px 20px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
+      transition: background 0.2s; font-size: 0.875rem;
     }
-    .sync-form button:hover { background: #2563eb; }
-    .sync-form button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: #3b82f6; color: white; }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-warning { background: #d97706; color: white; }
+    .btn-warning:hover { background: #b45309; }
 
     .result-box {
       margin-top: 16px; padding: 16px; border-radius: 8px;
@@ -63,6 +65,12 @@ export function getAdminDashboardHTML(): string {
     }
     .result-box.success { background: #064e3b; border: 1px solid #059669; color: #34d399; }
     .result-box.error { background: #450a0a; border: 1px solid #dc2626; color: #fca5a5; }
+
+    .info-box {
+      background: #0f172a; border: 1px solid #334155; border-radius: 8px;
+      padding: 12px 16px; font-size: 0.8rem; color: #94a3b8; margin-bottom: 16px;
+    }
+    .info-box strong { color: #e2e8f0; }
 
     .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
     .stat { text-align: center; }
@@ -79,6 +87,7 @@ export function getAdminDashboardHTML(): string {
     }
     .tag-success { background: #064e3b; color: #34d399; }
     .tag-error { background: #450a0a; color: #fca5a5; }
+    .tag-info { background: #1e3a5f; color: #93c5fd; }
     .empty-state { text-align: center; padding: 40px; color: #64748b; }
     .refresh-btn {
       padding: 8px 16px; background: #334155; color: #e2e8f0;
@@ -100,7 +109,7 @@ export function getAdminDashboardHTML(): string {
     .method-post { background: #065f46; color: #6ee7b7; }
     .endpoint-path { color: #e2e8f0; font-family: monospace; }
 
-    .loading { display: inline-block; width: 16px; height: 16px; border: 2px solid #3b82f6; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; }
+    .loading { display: inline-block; width: 16px; height: 16px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
@@ -116,11 +125,18 @@ export function getAdminDashboardHTML(): string {
 
     <div class="grid">
       <div class="card">
-        <h2>⚡ Sincronización Rápida</h2>
+        <h2>⚡ Sincronización Manual</h2>
+        <div class="info-box">
+          <strong>🤖 Automático:</strong> Cuando edites un producto en Shopify (fotos, descripción), 
+          el webhook lo sincronizará solo. Usa los botones de abajo solo para forzar manualmente.
+        </div>
         <form class="sync-form" id="syncForm">
           <input type="text" id="skuInput" placeholder="Ingresa un SKU (ej: prueba123)" required>
-          <button type="submit" id="syncBtn">Sincronizar</button>
         </form>
+        <div style="display:flex; gap:10px;">
+          <button class="btn btn-primary" id="syncBtn" onclick="doSync('create')">🆕 Sincronizar / Crear</button>
+          <button class="btn btn-warning" id="updateBtn" onclick="doSync('update')">🔄 Actualizar Existente</button>
+        </div>
         <div class="result-box" id="resultBox"></div>
       </div>
 
@@ -156,8 +172,9 @@ export function getAdminDashboardHTML(): string {
     <div class="card" style="margin-top: 20px;">
       <h2>🔗 Endpoints Disponibles</h2>
       <ul class="endpoint-list">
-        <li><span class="method method-post">POST</span> <span class="endpoint-path">/sync/sku</span> <span style="color:#64748b">— Sincronizar manualmente por SKU</span></li>
-        <li><span class="method method-post">POST</span> <span class="endpoint-path">/webhook/shopify</span> <span style="color:#64748b">— Webhook de Shopify</span></li>
+        <li><span class="method method-post">POST</span> <span class="endpoint-path">/sync/sku</span> <span style="color:#64748b">— Crear descripción web si no existe</span></li>
+        <li><span class="method method-post">POST</span> <span class="endpoint-path">/sync/sku/update</span> <span style="color:#64748b">— Forzar actualización de existente</span></li>
+        <li><span class="method method-post">POST</span> <span class="endpoint-path">/webhook/shopify</span> <span style="color:#64748b">— Webhook automático de Shopify</span></li>
         <li><span class="method method-get">GET</span> <span class="endpoint-path">/health</span> <span style="color:#64748b">— Health check</span></li>
         <li><span class="method method-get">GET</span> <span class="endpoint-path">/api/history</span> <span style="color:#64748b">— Historial JSON</span></li>
       </ul>
@@ -165,22 +182,31 @@ export function getAdminDashboardHTML(): string {
   </div>
 
   <script>
-    const syncForm = document.getElementById('syncForm');
     const skuInput = document.getElementById('skuInput');
     const syncBtn = document.getElementById('syncBtn');
+    const updateBtn = document.getElementById('updateBtn');
     const resultBox = document.getElementById('resultBox');
 
-    syncForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
+    async function doSync(mode) {
       const sku = skuInput.value.trim();
-      if (!sku) return;
+      if (!sku) {
+        resultBox.style.display = 'block';
+        resultBox.className = 'result-box error';
+        resultBox.innerHTML = '❌ Ingresa un SKU primero';
+        return;
+      }
 
-      syncBtn.disabled = true;
-      syncBtn.innerHTML = '<span class="loading"></span>';
+      const isUpdate = mode === 'update';
+      const btn = isUpdate ? updateBtn : syncBtn;
+      const endpoint = isUpdate ? '/sync/sku/update' : '/sync/sku';
+
+      btn.disabled = true;
+      const originalText = btn.textContent;
+      btn.innerHTML = '<span class="loading"></span>';
       resultBox.style.display = 'none';
 
       try {
-        const res = await fetch('/sync/sku', {
+        const res = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sku })
@@ -202,9 +228,14 @@ export function getAdminDashboardHTML(): string {
         resultBox.className = 'result-box error';
         resultBox.innerHTML = '❌ <strong>Error de conexión:</strong> ' + err.message;
       } finally {
-        syncBtn.disabled = false;
-        syncBtn.textContent = 'Sincronizar';
+        btn.disabled = false;
+        btn.textContent = originalText;
       }
+    }
+
+    // Enter key triggers sync (create mode)
+    skuInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') doSync('create');
     });
 
     async function loadHistory() {
@@ -229,9 +260,10 @@ export function getAdminDashboardHTML(): string {
         let html = '<table><thead><tr><th>Hora</th><th>SKU</th><th>Estado</th><th>Mensaje</th><th>Producto Web ID</th></tr></thead><tbody>';
         for (const item of history.slice().reverse()) {
           const time = new Date(item.timestamp).toLocaleString('es-CL');
+          const tagClass = item.success ? 'tag-success' : (item.message?.includes('no tiene descripción web') ? 'tag-info' : 'tag-error');
           const status = item.success
             ? '<span class="tag tag-success">✓ ÉXITO</span>'
-            : '<span class="tag tag-error">✗ ERROR</span>';
+            : '<span class="tag ' + tagClass + '">✗ ERROR</span>';
           html += '<tr>';
           html += '<td style="color:#94a3b8;font-size:0.8rem;">' + time + '</td>';
           html += '<td><code>' + item.sku + '</code></td>';

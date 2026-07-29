@@ -48,5 +48,6 @@ app.listen(PORT, "0.0.0.0", () => {
   logger.info(`🎛️  Admin panel:     GET  http://0.0.0.0:${PORT}/admin`);
   logger.info(`📡 Webhook Shopify: POST http://0.0.0.0:${PORT}/webhook/shopify`);
   logger.info(`🔄 Sync manual:     POST http://0.0.0.0:${PORT}/sync/sku`);
+  logger.info(`🔄 Force update:    POST http://0.0.0.0:${PORT}/sync/sku/update`);
   logger.info(`🏥 Health check:    GET  http://0.0.0.0:${PORT}/health`);
 });

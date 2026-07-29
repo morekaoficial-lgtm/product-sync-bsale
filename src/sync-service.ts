@@ -38,14 +38,8 @@ class SyncService {
       return result;
     }
 
-    // Verificar que tenemos productId (puede estar en variant.product o variant.productId)
     const productId = variant.product?.id || variant.productId || variant.product_id;
     if (!productId) {
-      logger.error("Variante encontrada pero sin productId", { 
-        sku, 
-        variantKeys: Object.keys(variant),
-        product: variant.product
-      });
       const result = { success: false, sku, message: "Variante sin productId asociado en Bsale" };
       addToHistory(result);
       return result;
@@ -81,11 +75,9 @@ class SyncService {
       order: idx,
     }));
 
-    // Asegurar tipos numéricos (la API v2 de Bsale es estricta)
     const numericProductId = Number(productId);
     const numericVariantId = Number(variant.id);
 
-    // Construir payload EXACTO según documentación Bsale v2
     const payload = {
       productId: numericProductId,
       idVariantDefault: numericVariantId,
@@ -99,13 +91,7 @@ class SyncService {
       state: 1,
       productType: "normal",
       pictures: pictures,
-      orderedVariants: [
-        {
-          id: numericVariantId,
-          order: 1,
-          show: 1,
-        },
-      ],
+      orderedVariants: [{ id: numericVariantId, order: 1, show: 1 }],
     };
 
     // 5. Crear si no existe
@@ -146,6 +132,104 @@ class SyncService {
       success: true,
       sku,
       message: webProduct.state === 0 ? "Descripción web activada y actualizada" : "Descripción web actualizada",
+      bsaleWebProductId: webProduct.id,
+      activated: webProduct.state === 0,
+    };
+    addToHistory(result);
+    return result;
+  }
+
+  /**
+   * Fuerza la actualización de un producto que YA tiene descripción web en Bsale.
+   * Útil para actualizar imágenes/descripción manualmente.
+   */
+  async forceUpdateBySKU(sku: string): Promise<SyncResult> {
+    logger.info("Forzando actualización por SKU", { sku });
+
+    // 1. Buscar variante en Bsale
+    const variant = await bsaleClient.findVariantByCode(sku);
+    if (!variant) {
+      const result = { success: false, sku, message: "SKU no encontrado en Bsale" };
+      addToHistory(result);
+      return result;
+    }
+
+    const productId = variant.product?.id || variant.productId || variant.product_id;
+    if (!productId) {
+      const result = { success: false, sku, message: "Variante sin productId asociado en Bsale" };
+      addToHistory(result);
+      return result;
+    }
+
+    // 2. Buscar descripción web existente (debe existir para actualizar)
+    const webProduct = await bsaleClient.findWebProductByCode(sku);
+    if (!webProduct) {
+      const result = { success: false, sku, message: "Este producto no tiene descripción web en Bsale aún. Use 'Sincronizar' primero." };
+      addToHistory(result);
+      return result;
+    }
+
+    // 3. Buscar producto en Shopify
+    let description = "";
+    let images: string[] = [];
+    let title = variant.name || sku;
+
+    try {
+      const shopifyProduct = await shopifyClient.findProductBySKU(sku);
+      if (shopifyProduct) {
+        description = shopifyProduct.descriptionHtml || shopifyProduct.body_html || "";
+        images = shopifyProduct.images?.edges?.map((e: any) => e.node.src) || [];
+        title = shopifyProduct.title || title;
+      }
+    } catch (err: any) {
+      logger.warn("Error buscando en Shopify", { sku, error: err.message });
+    }
+
+    // 4. Construir payload
+    const pictures = images.map((url: string, idx: number) => ({
+      href: url,
+      legendImage: "",
+      order: idx,
+    }));
+
+    const numericProductId = Number(productId);
+    const numericVariantId = Number(variant.id);
+
+    const payload = {
+      productId: numericProductId,
+      idVariantDefault: numericVariantId,
+      name: title,
+      description: description || "",
+      urlImg: images[0] || "",
+      urlVideo: "null",
+      displayNotice: " ",
+      variantShippingAll: 1,
+      order: 1,
+      state: 1,
+      productType: "normal",
+      pictures: pictures,
+      orderedVariants: [{ id: numericVariantId, order: 1, show: 1 }],
+    };
+
+    // 5. Activar si está inactiva
+    if (webProduct.state === 0) {
+      logger.info("Descripción web inactiva, activando...", { sku });
+      await bsaleClient.activateWebProduct(webProduct.id);
+    }
+
+    // 6. Forzar actualización
+    logger.info("Forzando actualización de descripción web", { sku, webProductId: webProduct.id });
+    const updated = await bsaleClient.updateWebProduct(webProduct.id, payload);
+    if (!updated) {
+      const result = { success: false, sku, message: "Error actualizando descripción web" };
+      addToHistory(result);
+      return result;
+    }
+
+    const result = {
+      success: true,
+      sku,
+      message: "Descripción web actualizada exitosamente",
       bsaleWebProductId: webProduct.id,
       activated: webProduct.state === 0,
     };
