@@ -41,7 +41,7 @@ router.post("/shopify", async (req, res) => {
  * Sincronización manual por SKU.
  * Body: { sku: string }
  */
-router.post("/sync/sku", async (req, res) => {
+router.post("/sku", async (req, res) => {
   try {
     const { sku } = req.body;
     if (!sku) {
@@ -55,13 +55,6 @@ router.post("/sync/sku", async (req, res) => {
     logger.error("Error en sync manual", { error: error.message });
     res.status(500).json({ success: false, error: error.message });
   }
-});
-
-/**
- * GET /health
- */
-router.get("/health", (_req, res) => {
-  res.json({ status: "ok", service: "product-sync-bsale", timestamp: new Date().toISOString() });
 });
 
 export default router;
