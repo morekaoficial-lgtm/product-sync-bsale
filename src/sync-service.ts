@@ -80,6 +80,13 @@ class SyncService {
       state: 1,
       productType: "normal",
       pictures: pictures,
+      orderedVariants: [
+        {
+          id: numericVariantId,
+          order: 1,
+          show: 1,
+        },
+      ],
     };
 
     // 5. Crear si no existe
