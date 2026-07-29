@@ -255,18 +255,22 @@ export function getAdminDashboardHTML() {
           return;
         }
 
-        let html = '<table><thead><tr><th>Hora</th><th>SKU</th><th>Estado</th><th>Mensaje</th><th>Producto Web ID</th></tr></thead><tbody>';
+        let html = '<table><thead><tr><th>Hora</th><th>SKU</th><th>Estado</th><th>Mensaje</th><th>Colección</th><th>Web ID</th></tr></thead><tbody>';
         for (const item of history.slice().reverse()) {
           const time = new Date(item.timestamp).toLocaleString('es-CL');
           const tagClass = item.success ? 'tag-success' : (item.message?.includes('no tiene descripción web') ? 'tag-info' : 'tag-error');
           const status = item.success
             ? '<span class="tag tag-success">✓ ÉXITO</span>'
             : '<span class="tag ' + tagClass + '">✗ ERROR</span>';
+          const collectionTag = item.collectionName 
+            ? '<span class="tag" style="background:#1e3a5f;color:#93c5fd;">' + item.collectionName + '</span>' 
+            : '—';
           html += '<tr>';
           html += '<td style="color:#94a3b8;font-size:0.8rem;">' + time + '</td>';
           html += '<td><code>' + item.sku + '</code></td>';
           html += '<td>' + status + '</td>';
           html += '<td>' + (item.message || '') + '</td>';
+          html += '<td>' + collectionTag + '</td>';
           html += '<td>' + (item.bsaleWebProductId || '—') + '</td>';
           html += '</tr>';
         }

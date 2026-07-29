@@ -138,6 +138,45 @@ class BsaleClient {
   async activateWebProduct(webProductId: number): Promise<boolean> {
     return this.updateWebProduct(webProductId, { state: 1 });
   }
+
+  /** Asignar producto a una colección */
+  async addProductToCollection(collectionId: number, sku: string): Promise<boolean> {
+    const url = `${BSALE_API_BASE}/collections/${collectionId}/products.json`;
+    try {
+      const res = await fetchWithTimeout(url, {
+        method: "POST",
+        headers: this.headers,
+        body: JSON.stringify({ code: sku }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        logger.error("Bsale addProductToCollection error", { collectionId, sku, status: res.status, text });
+        return false;
+      }
+      logger.info("Bsale addProductToCollection success", { collectionId, sku });
+      return true;
+    } catch (err: any) {
+      logger.error("Bsale addProductToCollection timeout/error", { collectionId, sku, error: err.message });
+      return false;
+    }
+  }
+
+  /** Obtener colecciones de un producto */
+  async getProductCollections(productId: number): Promise<any[]> {
+    const url = `${BSALE_API_V2}/products/${productId}/collections.json`;
+    try {
+      const res = await fetchWithTimeout(url, { headers: this.headers });
+      if (!res.ok) {
+        logger.error("Bsale getProductCollections error", { productId, status: res.status });
+        return [];
+      }
+      const data = await res.json();
+      return data.data || data.items || [];
+    } catch (err: any) {
+      logger.error("Bsale getProductCollections timeout/error", { productId, error: err.message });
+      return [];
+    }
+  }
 }
 
 export const bsaleClient = new BsaleClient();

@@ -1,6 +1,7 @@
 import { bsaleClient } from "./bsale-client.js";
 import { shopifyClient } from "./shopify-client.js";
 import { logger } from "./logger.js";
+import { findCollectionByProductName, getCollectionName } from "./collection-config.js";
 // Historial en memoria (limitado a 500 entradas)
 export const syncHistory = [];
 const MAX_HISTORY = 500;
@@ -47,7 +48,11 @@ class SyncService {
         catch (err) {
             logger.warn("Error buscando en Shopify, usando datos de Bsale", { sku, error: err.message });
         }
-        // 4. Construir pictures
+        // 4. Determinar colección según el nombre del producto
+        const collectionId = findCollectionByProductName(title);
+        const collectionName = collectionId ? getCollectionName(collectionId) : null;
+        logger.info("Colección detectada", { sku, title, collectionId, collectionName });
+        // 5. Construir pictures
         const pictures = images.map((url, idx) => ({
             href: url,
             legendImage: "",
@@ -70,7 +75,7 @@ class SyncService {
             pictures: pictures,
             orderedVariants: [{ id: numericVariantId, order: 1, show: 1 }],
         };
-        // 5. Crear si no existe
+        // 6. Crear si no existe
         if (!webProduct) {
             logger.info("Descripción web no existe, creando...", { sku, productId });
             const created = await bsaleClient.createWebProduct(payload);
@@ -83,11 +88,26 @@ class SyncService {
             if (created.id) {
                 bsaleClient.cacheWebProductId(sku, created.id);
             }
-            const result = { success: true, sku, message: "Descripción web creada exitosamente", bsaleWebProductId: created.id, created: true };
+            // 6a. Asignar a colección si se detectó una
+            let collectionAssigned = false;
+            if (collectionId) {
+                collectionAssigned = await bsaleClient.addProductToCollection(collectionId, sku);
+                logger.info("Asignación a colección", { sku, collectionId, collectionName, success: collectionAssigned });
+            }
+            const result = {
+                success: true,
+                sku,
+                message: `Descripción web creada exitosamente${collectionName ? ` + Colección: ${collectionName}` : ''}`,
+                bsaleWebProductId: created.id,
+                created: true,
+                collectionId,
+                collectionName,
+                collectionAssigned
+            };
             addToHistory(result);
             return result;
         }
-        // 6. Activar si está inactiva
+        // 7. Activar si está inactiva
         if (webProduct.state === 0) {
             logger.info("Descripción web inactiva, activando...", { sku, webProductId: webProduct.id });
             const activated = await bsaleClient.activateWebProduct(webProduct.id);
@@ -97,7 +117,7 @@ class SyncService {
                 return result;
             }
         }
-        // 7. Actualizar imágenes y descripción
+        // 8. Actualizar imágenes y descripción
         logger.info("Actualizando descripción web", { sku, webProductId: webProduct.id });
         const updated = await bsaleClient.updateWebProduct(webProduct.id, payload);
         if (!updated) {
@@ -105,12 +125,32 @@ class SyncService {
             addToHistory(result);
             return result;
         }
+        // 9. Verificar/asignar colección (por si no estaba asignada)
+        let collectionAssigned = false;
+        if (collectionId) {
+            // Verificar si ya está en la colección
+            const existingCollections = await bsaleClient.getProductCollections(numericProductId);
+            const alreadyInCollection = existingCollections.some((c) => c.id === collectionId);
+            if (!alreadyInCollection) {
+                collectionAssigned = await bsaleClient.addProductToCollection(collectionId, sku);
+                logger.info("Asignación a colección (update)", { sku, collectionId, collectionName, success: collectionAssigned });
+            }
+            else {
+                collectionAssigned = true;
+                logger.info("Producto ya está en la colección", { sku, collectionId, collectionName });
+            }
+        }
         const result = {
             success: true,
             sku,
-            message: webProduct.state === 0 ? "Descripción web activada y actualizada" : "Descripción web actualizada",
+            message: webProduct.state === 0
+                ? `Descripción web activada y actualizada${collectionName ? ` + Colección: ${collectionName}` : ''}`
+                : `Descripción web actualizada${collectionName ? ` + Colección: ${collectionName}` : ''}`,
             bsaleWebProductId: webProduct.id,
             activated: webProduct.state === 0,
+            collectionId,
+            collectionName,
+            collectionAssigned
         };
         // Guardar en cache para futuras actualizaciones
         if (webProduct.id) {
@@ -160,7 +200,11 @@ class SyncService {
         catch (err) {
             logger.warn("Error buscando en Shopify", { sku, error: err.message });
         }
-        // 4. Construir payload
+        // 4. Determinar colección según el nombre del producto
+        const collectionId = findCollectionByProductName(title);
+        const collectionName = collectionId ? getCollectionName(collectionId) : null;
+        logger.info("Colección detectada (force update)", { sku, title, collectionId, collectionName });
+        // 5. Construir payload
         const pictures = images.map((url, idx) => ({
             href: url,
             legendImage: "",
@@ -183,12 +227,12 @@ class SyncService {
             pictures: pictures,
             orderedVariants: [{ id: numericVariantId, order: 1, show: 1 }],
         };
-        // 5. Activar si está inactiva
+        // 6. Activar si está inactiva
         if (webProduct.state === 0) {
             logger.info("Descripción web inactiva, activando...", { sku });
             await bsaleClient.activateWebProduct(webProduct.id);
         }
-        // 6. Forzar actualización
+        // 7. Forzar actualización
         logger.info("Forzando actualización de descripción web", { sku, webProductId: webProduct.id });
         const updated = await bsaleClient.updateWebProduct(webProduct.id, payload);
         if (!updated) {
@@ -196,12 +240,29 @@ class SyncService {
             addToHistory(result);
             return result;
         }
+        // 8. Asignar a colección si se detectó una y no está ya asignada
+        let collectionAssigned = false;
+        if (collectionId) {
+            const existingCollections = await bsaleClient.getProductCollections(numericProductId);
+            const alreadyInCollection = existingCollections.some((c) => c.id === collectionId);
+            if (!alreadyInCollection) {
+                collectionAssigned = await bsaleClient.addProductToCollection(collectionId, sku);
+                logger.info("Asignación a colección (force update)", { sku, collectionId, collectionName, success: collectionAssigned });
+            }
+            else {
+                collectionAssigned = true;
+                logger.info("Producto ya está en la colección", { sku, collectionId, collectionName });
+            }
+        }
         const result = {
             success: true,
             sku,
-            message: "Descripción web actualizada exitosamente",
+            message: `Descripción web actualizada exitosamente${collectionName ? ` + Colección: ${collectionName}` : ''}`,
             bsaleWebProductId: webProduct.id,
             activated: webProduct.state === 0,
+            collectionId,
+            collectionName,
+            collectionAssigned
         };
         // Guardar en cache para futuras actualizaciones
         if (webProduct.id) {
