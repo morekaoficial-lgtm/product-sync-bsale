@@ -75,6 +75,8 @@ class SyncService {
       displayNotice: "0",
       displayQuantity: "0",
       displayUnit: "0",
+      order: 0,
+      available: 1,
     };
 
     // 5. Crear si no existe
