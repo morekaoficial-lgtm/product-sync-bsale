@@ -33,10 +33,10 @@ app.use((err, _req, res, _next) => {
     logger.error("Unhandled error", { error: err });
     res.status(500).json({ error: "Internal server error" });
 });
-app.listen(PORT, () => {
+app.listen(PORT, "0.0.0.0", () => {
     logger.info(`🚀 Product Sync Bsale corriendo en puerto ${PORT}`);
-    logger.info(`🎛️  Admin panel:     GET  http://localhost:${PORT}/admin`);
-    logger.info(`📡 Webhook Shopify: POST http://localhost:${PORT}/webhook/shopify`);
-    logger.info(`🔄 Sync manual:     POST http://localhost:${PORT}/sync/sku`);
-    logger.info(`🏥 Health check:    GET  http://localhost:${PORT}/health`);
+    logger.info(`🎛️  Admin panel:     GET  http://0.0.0.0:${PORT}/admin`);
+    logger.info(`📡 Webhook Shopify: POST http://0.0.0.0:${PORT}/webhook/shopify`);
+    logger.info(`🔄 Sync manual:     POST http://0.0.0.0:${PORT}/sync/sku`);
+    logger.info(`🏥 Health check:    GET  http://0.0.0.0:${PORT}/health`);
 });
