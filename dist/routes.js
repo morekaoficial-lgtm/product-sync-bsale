@@ -78,4 +78,41 @@ router.post("/sku/update", async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 });
+/**
+ * POST /sync/batch
+ * Sincronización en tanda de múltiples SKUs.
+ * Body: { skus: string[], mode?: 'create' | 'update' }
+ * Los SKUs pueden venir separados por coma, salto de línea o espacio.
+ */
+router.post("/batch", async (req, res) => {
+    try {
+        const { skus, mode = "create" } = req.body;
+        if (!skus || !Array.isArray(skus) || skus.length === 0) {
+            return res.status(400).json({ success: false, message: "skus (array) es requerido" });
+        }
+        logger.info("Sync batch iniciado", { count: skus.length, mode });
+        const results = [];
+        for (const sku of skus) {
+            const trimmedSku = sku.trim();
+            if (!trimmedSku)
+                continue;
+            const result = mode === "update"
+                ? await syncService.forceUpdateBySKU(trimmedSku)
+                : await syncService.syncBySKU(trimmedSku);
+            results.push(result);
+        }
+        const successCount = results.filter((r) => r.success).length;
+        res.json({
+            success: successCount > 0,
+            total: results.length,
+            successCount,
+            errorCount: results.length - successCount,
+            results,
+        });
+    }
+    catch (error) {
+        logger.error("Error en sync batch", { error: error.message });
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
 export default router;

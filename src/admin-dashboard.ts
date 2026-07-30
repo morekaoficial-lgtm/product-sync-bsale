@@ -37,6 +37,9 @@ export function getAdminDashboardHTML(): string {
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
     @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
 
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+    @media (max-width: 768px) { .grid-3 { grid-template-columns: 1fr; } }
+
     .card {
       background: #1e293b; border: 1px solid #334155;
       border-radius: 12px; padding: 24px;
@@ -58,6 +61,25 @@ export function getAdminDashboardHTML(): string {
     .btn-primary:hover { background: #2563eb; }
     .btn-warning { background: #d97706; color: white; }
     .btn-warning:hover { background: #b45309; }
+    .btn-success { background: #059669; color: white; }
+    .btn-success:hover { background: #047857; }
+
+    .batch-textarea {
+      width: 100%; min-height: 120px; padding: 12px 16px; background: #0f172a;
+      border: 1px solid #475569; border-radius: 8px; color: #f8fafc;
+      font-size: 0.875rem; font-family: monospace; resize: vertical;
+    }
+    .batch-textarea:focus { outline: none; border-color: #3b82f6; }
+    .batch-mode-select {
+      padding: 10px 14px; background: #0f172a; border: 1px solid #475569;
+      border-radius: 8px; color: #f8fafc; font-size: 0.875rem; cursor: pointer;
+    }
+    .batch-mode-select:focus { outline: none; border-color: #3b82f6; }
+    .batch-progress { margin: 16px 0; font-size: 0.875rem; color: #94a3b8; }
+    .batch-results { margin-top: 16px; }
+    .batch-results table { font-size: 0.8rem; }
+    .batch-results th { padding: 8px 12px; }
+    .batch-results td { padding: 8px 12px; }
 
     .result-box {
       margin-top: 16px; padding: 16px; border-radius: 8px;
@@ -141,6 +163,35 @@ export function getAdminDashboardHTML(): string {
       </div>
 
       <div class="card">
+        <h2>📦 Sincronización por Tandas</h2>
+        <div class="info-box">
+          <strong>💡 Tips:</strong> Pega múltiples SKUs separados por coma, salto de línea o espacio.
+          Ejemplo: <code>SKU001, SKU002, SKU003</code>
+        </div>
+        <textarea class="batch-textarea" id="batchSkus" placeholder="SKU001, SKU002, SKU003...
+SKU004
+SKU005 SKU006"></textarea>
+        <div style="display:flex; gap:10px; margin-top:12px; align-items:center;">
+          <select class="batch-mode-select" id="batchMode">
+            <option value="create">🆕 Crear descripciones</option>
+            <option value="update">🔄 Actualizar existentes</option>
+          </select>
+          <button class="btn btn-success" id="batchBtn" onclick="doBatchSync()">⚡ Sincronizar Tanda</button>
+        </div>
+        <div class="batch-progress" id="batchProgress" style="display:none;"></div>
+        <div class="batch-results" id="batchResults" style="display:none;">
+          <table>
+            <thead>
+              <tr><th>SKU</th><th>Estado</th><th>Mensaje</th><th>Colección</th><th>Web ID</th></tr>
+            </thead>
+            <tbody id="batchResultsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-3">
+      <div class="card">
         <h2>📊 Métricas</h2>
         <div class="stats" id="stats">
           <div class="stat">
@@ -172,6 +223,7 @@ export function getAdminDashboardHTML(): string {
     <div class="card" style="margin-top: 20px;">
       <h2>🔗 Endpoints Disponibles</h2>
       <ul class="endpoint-list">
+        <li><span class="method method-post">POST</span> <span class="endpoint-path">/sync/batch</span> <span style="color:#64748b">— Sincronizar tanda de SKUs</span></li>
         <li><span class="method method-post">POST</span> <span class="endpoint-path">/sync/sku</span> <span style="color:#64748b">— Crear descripción web si no existe</span></li>
         <li><span class="method method-post">POST</span> <span class="endpoint-path">/sync/sku/update</span> <span style="color:#64748b">— Forzar actualización de existente</span></li>
         <li><span class="method method-post">POST</span> <span class="endpoint-path">/webhook/shopify</span> <span style="color:#64748b">— Webhook automático de Shopify</span></li>
@@ -237,6 +289,72 @@ export function getAdminDashboardHTML(): string {
     skuInput.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') doSync('create');
     });
+
+    async function doBatchSync() {
+      const rawText = document.getElementById('batchSkus').value.trim();
+      const mode = document.getElementById('batchMode').value;
+      const btn = document.getElementById('batchBtn');
+      const progress = document.getElementById('batchProgress');
+      const resultsDiv = document.getElementById('batchResults');
+      const resultsBody = document.getElementById('batchResultsBody');
+
+      if (!rawText) {
+        progress.style.display = 'block';
+        progress.innerHTML = '❌ Pega al menos un SKU';
+        return;
+      }
+
+      // Parse SKUs: split by comma, newline, or space
+      const skus = rawText.split(/[,\n\s]+/).map(s => s.trim()).filter(s => s);
+      if (!skus.length) {
+        progress.style.display = 'block';
+        progress.innerHTML = '❌ No se encontraron SKUs válidos';
+        return;
+      }
+
+      btn.disabled = true;
+      const originalText = btn.textContent;
+      btn.innerHTML = '<span class="loading"></span> Procesando...';
+      progress.style.display = 'block';
+      progress.innerHTML = '⏳ Enviando ' + skus.length + ' SKUs...';
+      resultsDiv.style.display = 'none';
+
+      try {
+        const res = await fetch('/sync/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ skus, mode })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          progress.innerHTML = '✅ <strong>Completado:</strong> ' + data.successCount + ' de ' + data.total + ' exitosos';
+        } else {
+          progress.innerHTML = '⚠️ <strong>Resultado:</strong> ' + data.successCount + ' de ' + data.total + ' exitosos';
+        }
+
+        // Render results table
+        resultsBody.innerHTML = '';
+        for (const item of data.results) {
+          const statusTag = item.success
+            ? '<span class="tag tag-success">✓</span>'
+            : '<span class="tag tag-error">✗</span>';
+          const collectionTag = item.collectionName
+            ? '<span class="tag" style="background:#1e3a5f;color:#93c5fd;">' + item.collectionName + '</span>'
+            : '—';
+          const row = document.createElement('tr');
+          row.innerHTML = '<td><code>' + item.sku + '</code></td><td>' + statusTag + '</td><td>' + (item.message || '') + '</td><td>' + collectionTag + '</td><td>' + (item.bsaleWebProductId || '—') + '</td>';
+          resultsBody.appendChild(row);
+        }
+        resultsDiv.style.display = 'block';
+        loadHistory();
+      } catch (err) {
+        progress.innerHTML = '❌ <strong>Error:</strong> ' + err.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    }
 
     async function loadHistory() {
       try {
