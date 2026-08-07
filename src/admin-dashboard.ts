@@ -234,12 +234,17 @@ SKU005 SKU006"></textarea>
   </div>
 
   <script>
+    // Debug: confirmar que el script se cargó
+    console.log('[ProductSync] Admin panel script loaded');
+
     const skuInput = document.getElementById('skuInput');
     const syncBtn = document.getElementById('syncBtn');
     const updateBtn = document.getElementById('updateBtn');
     const resultBox = document.getElementById('resultBox');
 
-    async function doSync(mode) {
+    // Hacer funciones disponibles globalmente para onclick
+    window.doSync = async function(mode) {
+      console.log('[ProductSync] doSync called with mode:', mode);
       const sku = skuInput.value.trim();
       if (!sku) {
         resultBox.style.display = 'block';
@@ -258,12 +263,15 @@ SKU005 SKU006"></textarea>
       resultBox.style.display = 'none';
 
       try {
+        console.log('[ProductSync] Fetching:', endpoint, 'with SKU:', sku);
         const res = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sku })
         });
+        console.log('[ProductSync] Response status:', res.status);
         const data = await res.json();
+        console.log('[ProductSync] Response data:', data);
 
         resultBox.style.display = 'block';
         if (data.success) {
@@ -276,6 +284,7 @@ SKU005 SKU006"></textarea>
         }
         loadHistory();
       } catch (err) {
+        console.error('[ProductSync] Error:', err);
         resultBox.style.display = 'block';
         resultBox.className = 'result-box error';
         resultBox.innerHTML = '❌ <strong>Error de conexión:</strong> ' + err.message;
@@ -283,14 +292,15 @@ SKU005 SKU006"></textarea>
         btn.disabled = false;
         btn.textContent = originalText;
       }
-    }
+    };
 
     // Enter key triggers sync (create mode)
     skuInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') doSync('create');
+      if (e.key === 'Enter') window.doSync('create');
     });
 
-    async function doBatchSync() {
+    window.doBatchSync = async function() {
+      console.log('[ProductSync] doBatchSync called');
       const rawText = document.getElementById('batchSkus').value.trim();
       const mode = document.getElementById('batchMode').value;
       const btn = document.getElementById('batchBtn');
@@ -304,7 +314,6 @@ SKU005 SKU006"></textarea>
         return;
       }
 
-      // Parse SKUs: split by comma, newline, or space
       const skus = rawText.split(/[,\n\s]+/).map(s => s.trim()).filter(s => s);
       if (!skus.length) {
         progress.style.display = 'block';
@@ -320,12 +329,14 @@ SKU005 SKU006"></textarea>
       resultsDiv.style.display = 'none';
 
       try {
+        console.log('[ProductSync] Fetching /sync/batch with', skus.length, 'SKUs');
         const res = await fetch('/sync/batch', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ skus, mode })
         });
         const data = await res.json();
+        console.log('[ProductSync] Batch response:', data);
 
         if (data.success) {
           progress.innerHTML = '✅ <strong>Completado:</strong> ' + data.successCount + ' de ' + data.total + ' exitosos';
@@ -333,7 +344,6 @@ SKU005 SKU006"></textarea>
           progress.innerHTML = '⚠️ <strong>Resultado:</strong> ' + data.successCount + ' de ' + data.total + ' exitosos';
         }
 
-        // Render results table
         resultsBody.innerHTML = '';
         for (const item of data.results) {
           const statusTag = item.success
@@ -349,17 +359,20 @@ SKU005 SKU006"></textarea>
         resultsDiv.style.display = 'block';
         loadHistory();
       } catch (err) {
+        console.error('[ProductSync] Batch error:', err);
         progress.innerHTML = '❌ <strong>Error:</strong> ' + err.message;
       } finally {
         btn.disabled = false;
         btn.textContent = originalText;
       }
-    }
+    };
 
-    async function loadHistory() {
+    window.loadHistory = async function() {
+      console.log('[ProductSync] loadHistory called');
       try {
         const res = await fetch('/api/history');
         const history = await res.json();
+        console.log('[ProductSync] History loaded:', history.length, 'items');
 
         const total = history.length;
         const success = history.filter(h => h.success).length;
@@ -397,12 +410,15 @@ SKU005 SKU006"></textarea>
         html += '</tbody></table>';
         container.innerHTML = html;
       } catch (err) {
+        console.error('[ProductSync] History error:', err);
         document.getElementById('historyTable').innerHTML = '<div class="empty-state">Error cargando historial: ' + err.message + '</div>';
       }
-    }
+    };
 
-    loadHistory();
-    setInterval(loadHistory, 10000);
+    // Load history on page load
+    window.loadHistory();
+    setInterval(window.loadHistory, 10000);
+    console.log('[ProductSync] Init complete');
   </script>
 </body>
 </html>`;
