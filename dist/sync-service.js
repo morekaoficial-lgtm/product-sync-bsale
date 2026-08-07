@@ -2,6 +2,41 @@ import { bsaleClient } from "./bsale-client.js";
 import { shopifyClient } from "./shopify-client.js";
 import { logger } from "./logger.js";
 import { findCollectionByProductName, getCollectionName } from "./collection-config.js";
+/**
+ * Construye una descripción HTML que incluye las imágenes del producto
+ * directamente en el contenido. Esto soluciona el problema de que Bsale
+ * no renderiza imágenes subidas por API en la tienda web.
+ */
+function buildDescriptionWithImages(description, images, title) {
+    // Limpiar descripción original
+    let cleanDescription = description || "";
+    // Si la descripción no tiene etiquetas HTML básicas, envolverla
+    if (!cleanDescription.includes("<")) {
+        cleanDescription = `<p>${cleanDescription.replace(/\n/g, "</p><p>")}</p>`;
+    }
+    // Construir galería de imágenes en HTML
+    let imageGallery = "";
+    if (images.length > 0) {
+        const imageTags = images
+            .map((url, idx) => `<img src="${url}" alt="${title} - Imagen ${idx + 1}" style="max-width:100%;height:auto;display:block;margin:10px 0;border-radius:8px;" />`)
+            .join("");
+        imageGallery = `
+<div class="product-image-gallery" style="margin-top:24px;">
+  <h3 style="font-size:18px;margin-bottom:12px;">Galería de Imágenes</h3>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;">
+    ${imageTags}
+  </div>
+</div>`;
+    }
+    return `
+<div class="product-description-wrapper">
+  <div class="product-description-text">
+    ${cleanDescription}
+  </div>
+  ${imageGallery}
+</div>
+  `.trim();
+}
 // Historial en memoria (limitado a 500 entradas)
 export const syncHistory = [];
 const MAX_HISTORY = 500;
@@ -52,7 +87,9 @@ class SyncService {
         const collectionId = findCollectionByProductName(title);
         const collectionName = collectionId ? getCollectionName(collectionId) : null;
         logger.info("Colección detectada", { sku, title, collectionId, collectionName });
-        // 5. Construir pictures
+        // 5. Construir descripción HTML con imágenes incrustadas
+        const richDescription = buildDescriptionWithImages(description, images, title);
+        // 6. Construir pictures (para compatibilidad, aunque Bsale no las renderiza bien)
         const pictures = images.map((url, idx) => ({
             href: url,
             legendImage: "",
@@ -64,7 +101,7 @@ class SyncService {
             productId: numericProductId,
             idVariantDefault: numericVariantId,
             name: title,
-            description: description || " ",
+            description: richDescription,
             urlImg: images[0] || "",
             urlVideo: "null",
             displayNotice: " ",
@@ -205,7 +242,9 @@ class SyncService {
         const collectionId = findCollectionByProductName(title);
         const collectionName = collectionId ? getCollectionName(collectionId) : null;
         logger.info("Colección detectada (force update)", { sku, title, collectionId, collectionName });
-        // 5. Construir payload
+        // 5. Construir descripción HTML con imágenes incrustadas
+        const richDescription = buildDescriptionWithImages(description, images, title);
+        // 6. Construir payload
         const pictures = images.map((url, idx) => ({
             href: url,
             legendImage: "",
@@ -217,7 +256,7 @@ class SyncService {
             productId: numericProductId,
             idVariantDefault: numericVariantId,
             name: title,
-            description: description || " ",
+            description: richDescription,
             urlImg: images[0] || "",
             urlVideo: "null",
             displayNotice: " ",
