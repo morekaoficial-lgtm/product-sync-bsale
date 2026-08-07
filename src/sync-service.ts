@@ -2,6 +2,7 @@ import { bsaleClient } from "./bsale-client.js";
 import { shopifyClient } from "./shopify-client.js";
 import { logger } from "./logger.js";
 import { findCollectionByProductName, getCollectionName } from "./collection-config.js";
+import { downloadAndHostProductImages, clearProductImages } from "./image-service.js";
 
 /**
  * Construye una descripción HTML que incluye las imágenes del producto
@@ -120,11 +121,16 @@ class SyncService {
     const collectionName = collectionId ? getCollectionName(collectionId) : null;
     logger.info("Colección detectada", { sku, title, collectionId, collectionName });
 
-    // 5. Construir descripción HTML con imágenes incrustadas
-    const richDescription = buildDescriptionWithImages(description, images, title);
+    // 5. DESCARGAR imágenes de Shopify y alojarlas localmente
+    logger.info("Descargando imágenes de Shopify...", { sku, count: images.length });
+    const localImageUrls = await downloadAndHostProductImages(images, sku);
+    logger.info("Imágenes alojadas localmente", { sku, localUrls: localImageUrls });
 
-    // 6. Construir pictures (para compatibilidad, aunque Bsale no las renderiza bien)
-    const pictures = images.map((url: string, idx: number) => ({
+    // 6. Construir descripción HTML con imágenes incrustadas (usando URLs locales)
+    const richDescription = buildDescriptionWithImages(description, localImageUrls, title);
+
+    // 7. Construir pictures (usando URLs locales para que Bsale pueda descargarlas)
+    const pictures = localImageUrls.map((url: string, idx: number) => ({
       href: url,
       legendImage: "",
       order: idx,
@@ -138,7 +144,7 @@ class SyncService {
       idVariantDefault: numericVariantId,
       name: title,
       description: richDescription,
-      urlImg: images[0] || "",
+      urlImg: localImageUrls[0] || "",
       urlVideo: "null",
       displayNotice: " ",
       variantShippingAll: 1,
@@ -292,11 +298,16 @@ class SyncService {
     const collectionName = collectionId ? getCollectionName(collectionId) : null;
     logger.info("Colección detectada (force update)", { sku, title, collectionId, collectionName });
 
-    // 5. Construir descripción HTML con imágenes incrustadas
-    const richDescription = buildDescriptionWithImages(description, images, title);
+    // 5. DESCARGAR imágenes de Shopify y alojarlas localmente
+    logger.info("Descargando imágenes de Shopify (force update)...", { sku, count: images.length });
+    const localImageUrls = await downloadAndHostProductImages(images, sku);
+    logger.info("Imágenes alojadas localmente (force update)", { sku, localUrls: localImageUrls });
 
-    // 6. Construir payload
-    const pictures = images.map((url: string, idx: number) => ({
+    // 6. Construir descripción HTML con imágenes incrustadas
+    const richDescription = buildDescriptionWithImages(description, localImageUrls, title);
+
+    // 7. Construir payload
+    const pictures = localImageUrls.map((url: string, idx: number) => ({
       href: url,
       legendImage: "",
       order: idx,
@@ -310,7 +321,7 @@ class SyncService {
       idVariantDefault: numericVariantId,
       name: title,
       description: richDescription,
-      urlImg: images[0] || "",
+      urlImg: localImageUrls[0] || "",
       urlVideo: "null",
       displayNotice: " ",
       variantShippingAll: 1,

@@ -4,6 +4,7 @@ import { config, validateConfig } from "./config.js";
 import { logger } from "./logger.js";
 import routes from "./routes.js";
 import { getAdminDashboardHTML } from "./admin-dashboard.js";
+import { IMAGE_DIR } from "./image-service.js";
 validateConfig();
 const app = express();
 const PORT = config.port;
@@ -19,6 +20,8 @@ app.get("/admin", (_req, res) => {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.send(getAdminDashboardHTML());
 });
+// Servir imágenes descargadas localmente
+app.use("/images", express.static(IMAGE_DIR));
 // Rutas API
 app.use("/webhook", routes);
 app.use("/sync", routes);
