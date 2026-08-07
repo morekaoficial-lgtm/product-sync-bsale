@@ -312,7 +312,7 @@ SKU005 SKU006"></textarea>
         return;
       }
 
-      const skus = rawText.split(/[,\n\s]+/).map(s => s.trim()).filter(s => s);
+      const skus = rawText.split(/[,\s]+/).map(s => s.trim()).filter(s => s);
       if (!skus.length) {
         progress.style.display = 'block';
         progress.innerHTML = '❌ No se encontraron SKUs válidos';
