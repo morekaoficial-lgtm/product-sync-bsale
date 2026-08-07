@@ -90,26 +90,28 @@ class BsaleClient {
   /** Crear descripción web */
   async createWebProduct(payload: any): Promise<any | null> {
     const url = `${BSALE_API_V2}/products/market_info.json`;
-    logger.info("Bsale createWebProduct payload", { payload });
+    logger.info("Bsale createWebProduct payload", { payload: JSON.stringify(payload) });
     try {
       const res = await fetchWithTimeout(url, {
         method: "POST",
         headers: this.headers,
         body: JSON.stringify(payload),
       });
+      const responseText = await res.text();
+      logger.info("Bsale createWebProduct response", { status: res.status, body: responseText });
+      
       if (!res.ok) {
-        const text = await res.text();
-        logger.error("Bsale createWebProduct error", { status: res.status, text });
-        return null;
+        logger.error("Bsale createWebProduct error", { status: res.status, text: responseText });
+        return { error: true, status: res.status, message: responseText };
       }
-      const data = await res.json();
-      // La respuesta tiene formato: { code: 200, data: { id: 57, ... } }
+      
+      const data = JSON.parse(responseText);
       const webProduct = data.data || data;
       logger.info("Bsale createWebProduct success", { webProductId: webProduct?.id });
       return webProduct;
     } catch (err: any) {
       logger.error("Bsale createWebProduct timeout/error", { error: err.message });
-      return null;
+      return { error: true, message: err.message };
     }
   }
 

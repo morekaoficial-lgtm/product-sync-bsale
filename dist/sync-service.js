@@ -79,8 +79,9 @@ class SyncService {
         if (!webProduct) {
             logger.info("Descripción web no existe, creando...", { sku, productId });
             const created = await bsaleClient.createWebProduct(payload);
-            if (!created) {
-                const result = { success: false, sku, message: "Error creando descripción web en Bsale" };
+            if (!created || created.error) {
+                const errorMsg = created?.message || "Error creando descripción web en Bsale";
+                const result = { success: false, sku, message: `Error creando descripción web en Bsale: ${errorMsg}` };
                 addToHistory(result);
                 return result;
             }
