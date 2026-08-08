@@ -36,25 +36,42 @@ class BsaleClient {
     return this.webProductIdCache.get(sku);
   }
 
-  /** Buscar variante por código (SKU) */
+  /** Buscar variante por código (SKU) — incluye inactivas */
   async findVariantByCode(code: string): Promise<any | null> {
-    const url = `${BSALE_API_BASE}/variants.json?code=${encodeURIComponent(code)}`;
+    // 1. Buscar activas primero (state=1)
+    let url = `${BSALE_API_BASE}/variants.json?code=${encodeURIComponent(code)}&state=1`;
     try {
       const res = await fetchWithTimeout(url, { headers: this.headers });
-      if (!res.ok) {
-        logger.error("Bsale findVariant error", { code, status: res.status });
-        return null;
+      if (res.ok) {
+        const data = await res.json();
+        const variant = data.items?.[0] || null;
+        if (variant) {
+          logger.info("Bsale variant found (active)", { code, variantId: variant.id, productId: variant.productId });
+          return variant;
+        }
       }
-      const data = await res.json();
-      const variant = data.items?.[0] || null;
-      if (variant) {
-        logger.info("Bsale variant found", { code, variantId: variant.id, productId: variant.productId, keys: Object.keys(variant).slice(0, 10) });
-      }
-      return variant;
     } catch (err: any) {
-      logger.error("Bsale findVariant timeout/error", { code, error: err.message });
-      return null;
+      logger.error("Bsale findVariant active error", { code, error: err.message });
     }
+
+    // 2. Si no se encontró, buscar inactivas (state=0)
+    url = `${BSALE_API_BASE}/variants.json?code=${encodeURIComponent(code)}&state=0`;
+    try {
+      const res = await fetchWithTimeout(url, { headers: this.headers });
+      if (res.ok) {
+        const data = await res.json();
+        const variant = data.items?.[0] || null;
+        if (variant) {
+          logger.info("Bsale variant found (inactive)", { code, variantId: variant.id, productId: variant.productId });
+          return variant;
+        }
+      }
+    } catch (err: any) {
+      logger.error("Bsale findVariant inactive error", { code, error: err.message });
+    }
+
+    logger.warn("Bsale variant not found", { code });
+    return null;
   }
 
   /** Buscar descripción web por código de variante (API v2) */
