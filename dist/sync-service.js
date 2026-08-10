@@ -66,23 +66,45 @@ class SyncService {
         logger.info("Variante válida encontrada", { sku, variantId: variant.id, productId });
         // 2. Buscar descripción web existente
         let webProduct = await bsaleClient.findWebProductByCode(sku);
+        logger.info("Bsale webProduct lookup", { sku, found: !!webProduct, state: webProduct?.state });
         // 3. Buscar producto en Shopify para obtener datos
         let description = "";
         let images = [];
         let title = variant.name || sku;
         try {
+            logger.info("Buscando producto en Shopify por SKU", { sku });
             const shopifyProduct = await shopifyClient.findProductBySKU(sku);
             if (shopifyProduct) {
                 description = shopifyProduct.descriptionHtml || shopifyProduct.body_html || "";
                 images = shopifyProduct.images?.edges?.map((e) => e.node.src) || [];
                 title = shopifyProduct.title || title;
+                logger.info("Producto encontrado en Shopify", {
+                    sku,
+                    title,
+                    descriptionLength: description.length,
+                    imagesCount: images.length,
+                });
             }
             else {
-                logger.warn("Producto no encontrado en Shopify, usando datos de Bsale", { sku });
+                logger.error("Producto NO encontrado en Shopify por SKU", { sku });
+                const result = {
+                    success: false,
+                    sku,
+                    message: `SKU ${sku} existe en Bsale pero NO fue encontrado en Shopify. Verifica que el SKU sea identico en ambas plataformas.`,
+                };
+                addToHistory(result);
+                return result;
             }
         }
         catch (err) {
-            logger.warn("Error buscando en Shopify, usando datos de Bsale", { sku, error: err.message });
+            logger.error("Error buscando en Shopify", { sku, error: err.message });
+            const result = {
+                success: false,
+                sku,
+                message: `Error buscando SKU ${sku} en Shopify: ${err.message}`,
+            };
+            addToHistory(result);
+            return result;
         }
         // 4. Determinar colección según el nombre del producto
         const collectionId = findCollectionByProductName(title);

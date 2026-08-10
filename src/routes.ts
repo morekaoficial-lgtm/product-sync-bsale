@@ -1,6 +1,5 @@
 import { Router } from "express";
 import { syncService, syncHistory } from "./sync-service.js";
-import { shopifyClient } from "./shopify-client.js";
 import { logger } from "./logger.js";
 
 const router = Router();
@@ -138,63 +137,6 @@ router.post("/batch", async (req, res) => {
     });
   } catch (error: any) {
     logger.error("Error en sync batch", { error: error.message });
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-/**
- * POST /sync/shopify-id
- * Sincronización manual por ID de producto de Shopify.
- * Body: { shopifyId: string | number }
- */
-router.post("/shopify-id", async (req, res) => {
-  try {
-    const { shopifyId } = req.body;
-    if (!shopifyId) {
-      return res.status(400).json({ success: false, message: "shopifyId es requerido" });
-    }
-
-    logger.info("Sync manual por Shopify ID solicitado", { shopifyId });
-
-    // 1. Buscar producto en Shopify por ID
-    const shopifyProduct = await shopifyClient.getProduct(Number(shopifyId));
-    if (!shopifyProduct) {
-      return res.status(404).json({ success: false, message: `Producto ${shopifyId} no encontrado en Shopify` });
-    }
-
-    // 2. Extraer datos
-    const shopifyDetails = {
-      title: shopifyProduct.title || "",
-      descriptionHtml: shopifyProduct.body_html || "",
-      images: (shopifyProduct.images || []).map((img: any) => img.src).filter(Boolean),
-    };
-
-    const variants = shopifyProduct.variants || [];
-    if (!variants.length) {
-      return res.status(400).json({ success: false, message: "El producto no tiene variantes" });
-    }
-
-    // 3. Sync cada variant por SKU
-    const results = [];
-    for (const variant of variants) {
-      const sku = variant.sku;
-      if (!sku) continue;
-
-      const result = await syncService.syncBySKUWithDetails(sku, shopifyDetails);
-      results.push(result);
-    }
-
-    const successCount = results.filter((r) => r.success).length;
-    res.json({
-      success: successCount > 0,
-      shopifyId,
-      title: shopifyDetails.title,
-      total: results.length,
-      successCount,
-      results,
-    });
-  } catch (error: any) {
-    logger.error("Error en sync por Shopify ID", { error: error.message });
     res.status(500).json({ success: false, error: error.message });
   }
 });
