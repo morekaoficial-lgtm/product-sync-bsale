@@ -1,6 +1,6 @@
 import { config } from "./config.js";
 import { logger } from "./logger.js";
-const API_VERSION = "2025-10";
+const API_VERSION = "2025-01";
 const REQUEST_TIMEOUT = 10000; // 10 segundos
 /** Helper: fetch con timeout */
 async function fetchWithTimeout(url, options = {}, timeoutMs = REQUEST_TIMEOUT) {

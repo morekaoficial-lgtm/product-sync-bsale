@@ -203,6 +203,145 @@ class SyncService {
         return result;
     }
     /**
+     * Sync product using pre-fetched Shopify details (avoids extra API call).
+     * Used by webhook handler which already has product data in the payload.
+     */
+    async syncBySKUWithDetails(sku, shopifyDetails) {
+        logger.info("Iniciando sync por SKU con detalles pre-fetched", { sku, title: shopifyDetails.title });
+        // 1. Buscar variante en Bsale
+        const variant = await bsaleClient.findVariantByCode(sku);
+        if (!variant) {
+            const result = { success: false, sku, message: "SKU no encontrado en Bsale" };
+            addToHistory(result);
+            return result;
+        }
+        const productId = variant.product?.id || variant.productId || variant.product_id;
+        if (!productId) {
+            const result = { success: false, sku, message: "Variante sin productId asociado en Bsale" };
+            addToHistory(result);
+            return result;
+        }
+        // 2. Buscar descripción web existente
+        let webProduct = await bsaleClient.findWebProductByCode(sku);
+        // 3. Usar datos directamente del webhook (no llamar a Shopify API)
+        const description = shopifyDetails.descriptionHtml || "";
+        const images = shopifyDetails.images || [];
+        const title = shopifyDetails.title || variant.name || sku;
+        logger.info("Datos del webhook usados directamente", {
+            sku,
+            title,
+            descriptionLength: description.length,
+            imagesCount: images.length,
+        });
+        // 4. Determinar colección
+        const collectionId = findCollectionByProductName(title);
+        const collectionName = collectionId ? getCollectionName(collectionId) : null;
+        // 5. Descargar imágenes y alojar localmente
+        const localImageUrls = await downloadAndHostProductImages(images, sku);
+        // 6. Construir descripción HTML
+        const richDescription = buildDescriptionWithImages(description, localImageUrls, title);
+        // 7. Construir payload
+        const pictures = localImageUrls.map((url, idx) => ({
+            href: url,
+            legendImage: "",
+            order: idx,
+        }));
+        const numericProductId = Number(productId);
+        const numericVariantId = Number(variant.id);
+        const payload = {
+            productId: numericProductId,
+            idVariantDefault: numericVariantId,
+            name: title,
+            description: richDescription,
+            urlImg: localImageUrls[0] || "",
+            urlVideo: "null",
+            displayNotice: " ",
+            variantShippingAll: 1,
+            order: 1,
+            state: 1,
+            productType: "normal",
+            pictures: pictures,
+            orderedVariants: [{ id: numericVariantId, order: 1, show: 1 }],
+        };
+        // 8. Crear si no existe
+        if (!webProduct) {
+            logger.info("Descripción web no existe, creando...", { sku, productId });
+            const created = await bsaleClient.createWebProduct(payload);
+            if (!created || created.error) {
+                const errorMsg = created?.message || "Error creando descripción web en Bsale";
+                const result = { success: false, sku, message: `Error creando descripción web en Bsale: ${errorMsg}` };
+                addToHistory(result);
+                return result;
+            }
+            if (created.id) {
+                bsaleClient.cacheWebProductId(sku, created.id);
+            }
+            let collectionAssigned = false;
+            if (collectionId) {
+                collectionAssigned = await bsaleClient.addProductToCollection(collectionId, sku);
+            }
+            const result = {
+                success: true,
+                sku,
+                message: `Descripción web creada exitosamente${collectionName ? ` + Colección: ${collectionName}` : ''}`,
+                bsaleWebProductId: created.id,
+                created: true,
+                collectionId,
+                collectionName,
+                collectionAssigned
+            };
+            addToHistory(result);
+            return result;
+        }
+        // 9. Activar si está inactiva
+        if (webProduct.state === 0) {
+            logger.info("Descripción web inactiva, activando...", { sku, webProductId: webProduct.id });
+            const activated = await bsaleClient.activateWebProduct(webProduct.id);
+            if (!activated) {
+                const result = { success: false, sku, message: "Error activando descripción web" };
+                addToHistory(result);
+                return result;
+            }
+        }
+        // 10. Actualizar
+        logger.info("Actualizando descripción web", { sku, webProductId: webProduct.id });
+        const updated = await bsaleClient.updateWebProduct(webProduct.id, payload);
+        if (!updated) {
+            const result = { success: false, sku, message: "Error actualizando descripción web" };
+            addToHistory(result);
+            return result;
+        }
+        // 11. Verificar colección
+        let collectionAssigned = false;
+        if (collectionId) {
+            const existingCollections = await bsaleClient.getProductCollections(numericProductId);
+            const alreadyInCollection = existingCollections.some((c) => c.id === collectionId);
+            if (!alreadyInCollection) {
+                collectionAssigned = await bsaleClient.addProductToCollection(collectionId, sku);
+            }
+            else {
+                collectionAssigned = true;
+            }
+        }
+        const result = {
+            success: true,
+            sku,
+            message: webProduct.state === 0
+                ? `Descripción web activada y actualizada${collectionName ? ` + Colección: ${collectionName}` : ''}`
+                : `Descripción web actualizada${collectionName ? ` + Colección: ${collectionName}` : ''}`,
+            bsaleWebProductId: webProduct.id,
+            activated: webProduct.state === 0,
+            collectionId,
+            collectionName,
+            collectionAssigned
+        };
+        if (webProduct.id) {
+            bsaleClient.cacheWebProductId(sku, webProduct.id);
+        }
+        addToHistory(result);
+        return result;
+    }
+    /**
      * Fuerza la actualización de un producto que YA tiene descripción web en Bsale.
      * Útil para actualizar imágenes/descripción manualmente.
      */
