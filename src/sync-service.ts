@@ -572,19 +572,26 @@ class SyncService {
    */
   async syncProductWithAllVariants(
     skus: string[],
-    shopifyDetails: { title: string; descriptionHtml: string; images: string[] }
+    shopifyDetails: { title: string; descriptionHtml: string; images: string[] },
+    baseSku?: string
   ): Promise<SyncResult> {
     logger.info("Iniciando sync de producto con múltiples variantes", {
       skus,
       title: shopifyDetails.title,
+      baseSku,
     });
 
     // 1. Buscar TODAS las variantes en Bsale
     const bsaleVariants: any[] = [];
+    let baseVariant: any = null;
+
     for (const sku of skus) {
       const variant = await bsaleClient.findVariantByCode(sku);
       if (variant) {
         bsaleVariants.push({ sku, variant });
+        if (baseSku && sku === baseSku) {
+          baseVariant = { sku, variant };
+        }
       } else {
         logger.warn("Variante no encontrada en Bsale, se omite", { sku });
       }
@@ -600,28 +607,38 @@ class SyncService {
       return result;
     }
 
-    // 2. Verificar que todas pertenezcan al MISMO productId
-    const productIds = new Set(
-      bsaleVariants.map((v) => v.variant.product?.id || v.variant.productId || v.variant.product_id)
-    );
-    if (productIds.size > 1) {
-      logger.warn("Variantes pertenecen a múltiples productos en Bsale", {
-        productIds: Array.from(productIds),
-        skus,
-      });
-      // Usar el productId de la primera variante como principal
+    // 2. Determinar el producto principal
+    // Si se proporcionó baseSku, usar ese como principal
+    // Si no, usar el primero
+    if (baseVariant) {
+      // Mover baseVariant al principio del array
+      const idx = bsaleVariants.findIndex((v) => v.sku === baseSku);
+      if (idx > 0) {
+        const [item] = bsaleVariants.splice(idx, 1);
+        bsaleVariants.unshift(item);
+      }
     }
 
-    const mainProductId = Array.from(productIds)[0];
     const mainVariant = bsaleVariants[0].variant;
+    const mainProductId = mainVariant.product?.id || mainVariant.productId || mainVariant.product_id;
 
-    // 3. Buscar descripción web existente (por cualquiera de las variantes)
+    // 3. Buscar descripción web existente
+    // Si hay baseSku, buscar PRIMERO por ese (es el que debería tener la descripción web)
     let webProduct = null;
-    for (const { sku } of bsaleVariants) {
-      webProduct = await bsaleClient.findWebProductByCode(sku);
+    if (baseSku) {
+      webProduct = await bsaleClient.findWebProductByCode(baseSku);
       if (webProduct) {
-        logger.info("Descripción web existente encontrada", { sku, webProductId: webProduct.id });
-        break;
+        logger.info("Descripción web encontrada por baseSku", { baseSku, webProductId: webProduct.id });
+      }
+    }
+    // Si no se encontró por baseSku (o no se proporcionó), buscar por cualquiera
+    if (!webProduct) {
+      for (const { sku } of bsaleVariants) {
+        webProduct = await bsaleClient.findWebProductByCode(sku);
+        if (webProduct) {
+          logger.info("Descripción web existente encontrada", { sku, webProductId: webProduct.id });
+          break;
+        }
       }
     }
 

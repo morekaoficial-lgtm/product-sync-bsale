@@ -191,10 +191,13 @@ SKU005 SKU006"></textarea>
       <div class="card">
         <h2>🔗 Unir Variantes (Múltiples colores/tallas)</h2>
         <div class="info-box">
-          <strong>💡 Uso:</strong> Pega los SKUs de las variantes de UN mismo producto para unirlos en una sola descripción web. 
-          Ejemplo: un audífono en NEGRO y BEIGE comparten la misma página.
+          <strong>💡 Uso:</strong> Ingresá el SKU del producto que YA tiene descripción web como "Producto Original".
+          Luego pegá los SKUs de las variantes adicionales que querés unir a esa misma página.
+          Ejemplo: el audífono NEGRO ya tiene descripción web, ahora unimos BEIGE y AZUL.
         </div>
-        <textarea class="batch-textarea" id="mergeSkus" placeholder="SKU-NEGRO&#10;SKU-BEIGE&#10;SKU-AZUL
+        <input type="text" id="mergeBaseSku" placeholder="SKU del producto original (el que ya tiene descripción web)" 
+          style="width:100%; padding:12px 16px; background:#0f172a; border:1px solid #475569; border-radius:8px; color:#f8fafc; font-size:0.875rem; margin-bottom:12px;">
+        <textarea class="batch-textarea" id="mergeSkus" placeholder="SKU-BEIGE&#10;SKU-AZUL&#10;SKU-ROJO
 
 Separados por coma, espacio o salto de línea"></textarea>
         <div style="margin-top:12px;">
@@ -392,6 +395,7 @@ Separados por coma, espacio o salto de línea"></textarea>
 
     window.doMergeVariants = async function() {
       console.log('[ProductSync] doMergeVariants called');
+      const baseSku = document.getElementById('mergeBaseSku').value.trim();
       const rawText = document.getElementById('mergeSkus').value.trim();
       const title = document.getElementById('mergeTitle').value.trim();
       const descriptionHtml = document.getElementById('mergeDesc').value.trim();
@@ -399,20 +403,30 @@ Separados por coma, espacio o salto de línea"></textarea>
       const btn = document.getElementById('mergeBtn');
       const resultBox = document.getElementById('mergeResultBox');
 
+      if (!baseSku) {
+        resultBox.style.display = 'block';
+        resultBox.className = 'result-box error';
+        resultBox.innerHTML = '❌ Ingresa el SKU del producto original (el que ya tiene descripción web)';
+        return;
+      }
+
       if (!rawText) {
         resultBox.style.display = 'block';
         resultBox.className = 'result-box error';
-        resultBox.innerHTML = '❌ Ingresa al menos 2 SKUs de variantes';
+        resultBox.innerHTML = '❌ Ingresa al menos un SKU de variante adicional';
         return;
       }
 
       const skus = rawText.split(/[\s,]+/).map(s => s.trim()).filter(s => s);
-      if (skus.length < 2) {
+      if (!skus.length) {
         resultBox.style.display = 'block';
         resultBox.className = 'result-box error';
-        resultBox.innerHTML = '❌ Se necesitan al menos 2 SKUs para unir variantes';
+        resultBox.innerHTML = '❌ No se encontraron SKUs de variantes válidos';
         return;
       }
+
+      // Incluir baseSku en la lista si no está ya
+      const allSkus = skus.includes(baseSku) ? skus : [baseSku, ...skus];
 
       const images = imagesRaw ? imagesRaw.split(',').map(s => s.trim()).filter(s => s) : [];
 
@@ -422,11 +436,11 @@ Separados por coma, espacio o salto de línea"></textarea>
       resultBox.style.display = 'none';
 
       try {
-        console.log('[ProductSync] Fetching /sync/merge-variants with', skus.length, 'SKUs');
+        console.log('[ProductSync] Fetching /sync/merge-variants with', allSkus.length, 'SKUs, base:', baseSku);
         const res = await fetch('/sync/merge-variants', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ skus, title, descriptionHtml, images })
+          body: JSON.stringify({ skus: allSkus, baseSku, title, descriptionHtml, images })
         });
         const data = await res.json();
         console.log('[ProductSync] Merge response:', data);

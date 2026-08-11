@@ -144,11 +144,12 @@ router.post("/batch", async (req, res) => {
 /**
  * POST /sync/merge-variants
  * Une múltiples variantes del mismo producto en UNA sola descripción web.
- * Body: { skus: string[], title?: string, descriptionHtml?: string, images?: string[] }
+ * Body: { skus: string[], baseSku?: string, title?: string, descriptionHtml?: string, images?: string[] }
  *
  * Ejemplo para audífonos MOREKA BL032:
  * {
  *   "skus": ["78500569379655", "78500572964082"],
+ *   "baseSku": "78500569379655",
  *   "title": "AUDÍFONOS INALÁMBRICOS MOREKA BL032",
  *   "descriptionHtml": "...",
  *   "images": ["https://..."]
@@ -156,7 +157,7 @@ router.post("/batch", async (req, res) => {
  */
 router.post("/merge-variants", async (req, res) => {
   try {
-    const { skus, title, descriptionHtml, images } = req.body;
+    const { skus, baseSku, title, descriptionHtml, images } = req.body;
     if (!skus || !Array.isArray(skus) || skus.length < 2) {
       return res.status(400).json({
         success: false,
@@ -164,7 +165,7 @@ router.post("/merge-variants", async (req, res) => {
       });
     }
 
-    logger.info("Merge variants solicitado", { skus, count: skus.length });
+    logger.info("Merge variants solicitado", { skus, baseSku, count: skus.length });
 
     const shopifyDetails = {
       title: title || "",
@@ -172,7 +173,7 @@ router.post("/merge-variants", async (req, res) => {
       images: images || [],
     };
 
-    const result = await syncService.syncProductWithAllVariants(skus, shopifyDetails);
+    const result = await syncService.syncProductWithAllVariants(skus, shopifyDetails, baseSku);
     res.status(result.success ? 200 : 404).json(result);
   } catch (error: any) {
     logger.error("Error en merge variants", { error: error.message });
