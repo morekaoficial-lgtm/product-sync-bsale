@@ -127,7 +127,6 @@ router.post("/batch", async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 });
-export default router;
 /**
  * POST /sync/merge-variants
  * Une múltiples variantes del mismo producto en UNA sola descripción web.
@@ -164,3 +163,4 @@ router.post("/merge-variants", async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 });
+export default router;
