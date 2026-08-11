@@ -112,6 +112,16 @@ class ShopifyClient {
       }
       const product = edges[0]?.node?.product;
       logger.info("Shopify GraphQL: product found", { sku, productId: product?.id, title: product?.title });
+      
+      // Normalizar imágenes a formato array simple (igual que REST)
+      if (product) {
+        const images = product.images?.edges?.map((edge: any) => ({
+          src: edge.node?.src || "",
+          altText: edge.node?.altText || "",
+        })) || [];
+        product.images = images;
+      }
+      
       return product || null;
     } catch (err: any) {
       logger.error("Shopify GraphQL exception", { sku, error: err.message });
@@ -142,7 +152,7 @@ class ShopifyClient {
                 id: product.id,
                 title: product.title,
                 descriptionHtml: product.body_html,
-                images: { edges: (product.images || []).map((img: any) => ({ node: { src: img.src, altText: img.alt || "" } })) },
+                images: (product.images || []).map((img: any) => ({ src: img.src, altText: img.alt || "" })),
               };
             }
           }
