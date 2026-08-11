@@ -144,20 +144,18 @@ router.post("/batch", async (req, res) => {
 /**
  * POST /sync/merge-variants
  * Une múltiples variantes del mismo producto en UNA sola descripción web.
- * Body: { skus: string[], baseSku?: string, title?: string, descriptionHtml?: string, images?: string[] }
+ * SIEMPRE busca los datos (título, descripción, imágenes) desde Shopify usando baseSku.
+ * Body: { skus: string[], baseSku?: string }
  *
  * Ejemplo para audífonos MOREKA BL032:
  * {
  *   "skus": ["78500569379655", "78500572964082"],
- *   "baseSku": "78500569379655",
- *   "title": "AUDÍFONOS INALÁMBRICOS MOREKA BL032",
- *   "descriptionHtml": "...",
- *   "images": ["https://..."]
+ *   "baseSku": "78500569379655"
  * }
  */
 router.post("/merge-variants", async (req, res) => {
   try {
-    const { skus, baseSku, title, descriptionHtml, images } = req.body;
+    const { skus, baseSku } = req.body;
     if (!skus || !Array.isArray(skus) || skus.length < 2) {
       return res.status(400).json({
         success: false,
@@ -167,10 +165,11 @@ router.post("/merge-variants", async (req, res) => {
 
     logger.info("Merge variants solicitado", { skus, baseSku, count: skus.length });
 
+    // SIEMPRE buscar datos desde Shopify (ignorar cualquier title/descriptionHtml/images del body)
     const shopifyDetails = {
-      title: title || "",
-      descriptionHtml: descriptionHtml || "",
-      images: images || [],
+      title: "",
+      descriptionHtml: "",
+      images: [] as string[],
     };
 
     const result = await syncService.syncProductWithAllVariants(skus, shopifyDetails, baseSku);

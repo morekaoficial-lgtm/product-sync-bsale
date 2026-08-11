@@ -191,21 +191,13 @@ SKU005 SKU006"></textarea>
         <div class="info-box">
           <strong>💡 Uso:</strong> Ingresá el SKU del producto que YA tiene descripción web como "Producto Original".
           Luego pegá los SKUs de las variantes adicionales que querés unir a esa misma página.
-          Ejemplo: el audífono NEGRO ya tiene descripción web, ahora unimos BEIGE y AZUL.
+          El sistema buscará automáticamente los datos (título, descripción e imágenes) desde Shopify.
         </div>
         <input type="text" id="mergeBaseSku" placeholder="SKU del producto original (el que ya tiene descripción web)" 
           style="width:100%; padding:12px 16px; background:#0f172a; border:1px solid #475569; border-radius:8px; color:#f8fafc; font-size:0.875rem; margin-bottom:12px;">
         <textarea class="batch-textarea" id="mergeSkus" placeholder="SKU-BEIGE&#10;SKU-AZUL&#10;SKU-ROJO
 
 Separados por coma, espacio o salto de línea"></textarea>
-        <div style="margin-top:12px;">
-          <input type="text" id="mergeTitle" placeholder="Título del producto (opcional — se usa el de Shopify)" 
-            style="width:100%; padding:10px 14px; background:#0f172a; border:1px solid #475569; border-radius:8px; color:#f8fafc; font-size:0.875rem; margin-bottom:8px;">
-          <textarea id="mergeDesc" placeholder="Descripción HTML (opcional — se usa la de Shopify)" 
-            style="width:100%; min-height:60px; padding:10px 14px; background:#0f172a; border:1px solid #475569; border-radius:8px; color:#f8fafc; font-size:0.8rem; font-family:monospace; resize:vertical; margin-bottom:8px;"></textarea>
-          <input type="text" id="mergeImages" placeholder="URLs de imágenes separadas por coma (opcional — se usan las de Shopify)" 
-            style="width:100%; padding:10px 14px; background:#0f172a; border:1px solid #475569; border-radius:8px; color:#f8fafc; font-size:0.8rem; margin-bottom:8px;">
-        </div>
         <div style="display:flex; gap:10px; margin-top:12px;">
           <button class="btn btn-success" id="mergeBtn" onclick="doMergeVariants()">🔗 Unir Variantes</button>
         </div>
@@ -395,9 +387,6 @@ Separados por coma, espacio o salto de línea"></textarea>
       console.log('[ProductSync] doMergeVariants called');
       const baseSku = document.getElementById('mergeBaseSku').value.trim();
       const rawText = document.getElementById('mergeSkus').value.trim();
-      const title = document.getElementById('mergeTitle').value.trim();
-      const descriptionHtml = document.getElementById('mergeDesc').value.trim();
-      const imagesRaw = document.getElementById('mergeImages').value.trim();
       const btn = document.getElementById('mergeBtn');
       const resultBox = document.getElementById('mergeResultBox');
 
@@ -426,8 +415,6 @@ Separados por coma, espacio o salto de línea"></textarea>
       // Incluir baseSku en la lista si no está ya
       const allSkus = skus.includes(baseSku) ? skus : [baseSku, ...skus];
 
-      const images = imagesRaw ? imagesRaw.split(',').map(s => s.trim()).filter(s => s) : [];
-
       btn.disabled = true;
       const originalText = btn.textContent;
       btn.innerHTML = '<span class="loading"></span> Uniendo...';
@@ -435,10 +422,11 @@ Separados por coma, espacio o salto de línea"></textarea>
 
       try {
         console.log('[ProductSync] Fetching /sync/merge-variants with', allSkus.length, 'SKUs, base:', baseSku);
+        // NO enviamos title, descriptionHtml ni images — el backend busca automáticamente en Shopify
         const res = await fetch('/sync/merge-variants', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ skus: allSkus, baseSku, title, descriptionHtml, images })
+          body: JSON.stringify({ skus: allSkus, baseSku })
         });
         const data = await res.json();
         console.log('[ProductSync] Merge response:', data);
