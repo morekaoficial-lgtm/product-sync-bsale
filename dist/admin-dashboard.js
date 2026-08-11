@@ -186,6 +186,28 @@ SKU005 SKU006"></textarea>
           </table>
         </div>
       </div>
+      <div class="card">
+        <h2>🔗 Unir Variantes (Múltiples colores/tallas)</h2>
+        <div class="info-box">
+          <strong>💡 Uso:</strong> Pega los SKUs de las variantes de UN mismo producto para unirlos en una sola descripción web. 
+          Ejemplo: un audífono en NEGRO y BEIGE comparten la misma página.
+        </div>
+        <textarea class="batch-textarea" id="mergeSkus" placeholder="SKU-NEGRO&#10;SKU-BEIGE&#10;SKU-AZUL
+
+Separados por coma, espacio o salto de línea"></textarea>
+        <div style="margin-top:12px;">
+          <input type="text" id="mergeTitle" placeholder="Título del producto (opcional — se usa el de Shopify)" 
+            style="width:100%; padding:10px 14px; background:#0f172a; border:1px solid #475569; border-radius:8px; color:#f8fafc; font-size:0.875rem; margin-bottom:8px;">
+          <textarea id="mergeDesc" placeholder="Descripción HTML (opcional — se usa la de Shopify)" 
+            style="width:100%; min-height:60px; padding:10px 14px; background:#0f172a; border:1px solid #475569; border-radius:8px; color:#f8fafc; font-size:0.8rem; font-family:monospace; resize:vertical; margin-bottom:8px;"></textarea>
+          <input type="text" id="mergeImages" placeholder="URLs de imágenes separadas por coma (opcional — se usan las de Shopify)" 
+            style="width:100%; padding:10px 14px; background:#0f172a; border:1px solid #475569; border-radius:8px; color:#f8fafc; font-size:0.8rem; margin-bottom:8px;">
+        </div>
+        <div style="display:flex; gap:10px; margin-top:12px;">
+          <button class="btn btn-success" id="mergeBtn" onclick="doMergeVariants()">🔗 Unir Variantes</button>
+        </div>
+        <div class="result-box" id="mergeResultBox"></div>
+      </div>
     </div>
 
     <div class="grid-3">
@@ -221,6 +243,7 @@ SKU005 SKU006"></textarea>
     <div class="card" style="margin-top: 20px;">
       <h2>🔗 Endpoints Disponibles</h2>
       <ul class="endpoint-list">
+        <li><span class="method method-post">POST</span> <span class="endpoint-path">/sync/merge-variants</span> <span style="color:#64748b">— Unir múltiples variantes en una descripción web</span></li>
         <li><span class="method method-post">POST</span> <span class="endpoint-path">/sync/batch</span> <span style="color:#64748b">— Sincronizar tanda de SKUs</span></li>
         <li><span class="method method-post">POST</span> <span class="endpoint-path">/sync/sku</span> <span style="color:#64748b">— Crear descripción web si no existe</span></li>
         <li><span class="method method-post">POST</span> <span class="endpoint-path">/sync/sku/update</span> <span style="color:#64748b">— Forzar actualización de existente</span></li>
@@ -359,6 +382,69 @@ SKU005 SKU006"></textarea>
       } catch (err) {
         console.error('[ProductSync] Batch error:', err);
         progress.innerHTML = '❌ <strong>Error:</strong> ' + err.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    };
+
+    window.doMergeVariants = async function() {
+      console.log('[ProductSync] doMergeVariants called');
+      const rawText = document.getElementById('mergeSkus').value.trim();
+      const title = document.getElementById('mergeTitle').value.trim();
+      const descriptionHtml = document.getElementById('mergeDesc').value.trim();
+      const imagesRaw = document.getElementById('mergeImages').value.trim();
+      const btn = document.getElementById('mergeBtn');
+      const resultBox = document.getElementById('mergeResultBox');
+
+      if (!rawText) {
+        resultBox.style.display = 'block';
+        resultBox.className = 'result-box error';
+        resultBox.innerHTML = '❌ Ingresa al menos 2 SKUs de variantes';
+        return;
+      }
+
+      const skus = rawText.split(/[\s,]+/).map(s => s.trim()).filter(s => s);
+      if (skus.length < 2) {
+        resultBox.style.display = 'block';
+        resultBox.className = 'result-box error';
+        resultBox.innerHTML = '❌ Se necesitan al menos 2 SKUs para unir variantes';
+        return;
+      }
+
+      const images = imagesRaw ? imagesRaw.split(',').map(s => s.trim()).filter(s => s) : [];
+
+      btn.disabled = true;
+      const originalText = btn.textContent;
+      btn.innerHTML = '<span class="loading"></span> Uniendo...';
+      resultBox.style.display = 'none';
+
+      try {
+        console.log('[ProductSync] Fetching /sync/merge-variants with', skus.length, 'SKUs');
+        const res = await fetch('/sync/merge-variants', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ skus, title, descriptionHtml, images })
+        });
+        const data = await res.json();
+        console.log('[ProductSync] Merge response:', data);
+
+        resultBox.style.display = 'block';
+        if (data.success) {
+          resultBox.className = 'result-box success';
+          resultBox.innerHTML = '✅ <strong>Éxito:</strong> ' + (data.message || 'Variantes unidas') +
+            '<br>Web ID: <code>' + (data.bsaleWebProductId || '—') + '</code>' +
+            (data.collectionName ? '<br>Colección: ' + data.collectionName : '');
+        } else {
+          resultBox.className = 'result-box error';
+          resultBox.innerHTML = '❌ <strong>Error:</strong> ' + (data.message || 'Error desconocido');
+        }
+        loadHistory();
+      } catch (err) {
+        console.error('[ProductSync] Merge error:', err);
+        resultBox.style.display = 'block';
+        resultBox.className = 'result-box error';
+        resultBox.innerHTML = '❌ <strong>Error de conexión:</strong> ' + err.message;
       } finally {
         btn.disabled = false;
         btn.textContent = originalText;
