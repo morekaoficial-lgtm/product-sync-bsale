@@ -582,9 +582,13 @@ class SyncService {
         const description = shopifyDetails.descriptionHtml || "";
         const images = shopifyDetails.images || [];
         const title = shopifyDetails.title || mainVariant.name || skus[0];
-        // 5. Descargar imágenes
+        // 5. Descargar imágenes para alojarlas localmente (usadas en la descripción HTML)
         const localImageUrls = await downloadAndHostProductImages(images, skus[0]);
-        // 6. Construir descripción HTML
+        // 5b. Para el campo 'pictures' de Bsale, usar URLs originales de Shopify
+        // Bsale descarga las imágenes desde estas URLs. Usamos el CDN de Shopify
+        // porque es más confiable que nuestro servidor local.
+        const originalImageUrls = images.length > 0 ? images : localImageUrls;
+        // 6. Construir descripción HTML (usando imágenes locales para la descripción)
         const richDescription = buildDescriptionWithImages(description, localImageUrls, title);
         // 7. Construir orderedVariants con TODAS las variantes
         const orderedVariants = bsaleVariants.map((v, idx) => ({
@@ -596,8 +600,8 @@ class SyncService {
             count: orderedVariants.length,
             variantIds: orderedVariants.map((v) => v.id),
         });
-        // 8. Construir pictures
-        const pictures = localImageUrls.map((url, idx) => ({
+        // 8. Construir pictures usando URLs ORIGINALES de Shopify
+        const pictures = originalImageUrls.map((url, idx) => ({
             href: url,
             legendImage: "",
             order: idx,
@@ -609,7 +613,7 @@ class SyncService {
             idVariantDefault: numericVariantId,
             name: title,
             description: richDescription,
-            urlImg: localImageUrls[0] || "",
+            urlImg: originalImageUrls[0] || localImageUrls[0] || "",
             urlVideo: "null",
             displayNotice: " ",
             variantShippingAll: 1,
