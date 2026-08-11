@@ -532,6 +532,33 @@ class SyncService {
         }
         const mainVariant = bsaleVariants[0].variant;
         const mainProductId = mainVariant.product?.id || mainVariant.productId || mainVariant.product_id;
+        // 2b. Si no hay datos de Shopify, buscar automáticamente
+        const hasShopifyData = shopifyDetails.title || shopifyDetails.descriptionHtml || shopifyDetails.images.length > 0;
+        if (!hasShopifyData) {
+            const searchSku = baseSku || skus[0];
+            logger.info("No se proporcionaron datos de Shopify, buscando automáticamente", { searchSku });
+            try {
+                const shopifyProduct = await shopifyClient.findProductBySKU(searchSku);
+                if (shopifyProduct) {
+                    shopifyDetails.title = shopifyProduct.title || "";
+                    shopifyDetails.descriptionHtml = shopifyProduct.descriptionHtml || shopifyProduct.body_html || "";
+                    const imgs = shopifyProduct.images || [];
+                    shopifyDetails.images = imgs.map((img) => img.src || "").filter((url) => url);
+                    logger.info("Datos obtenidos de Shopify automáticamente", {
+                        sku: searchSku,
+                        title: shopifyDetails.title,
+                        imageCount: shopifyDetails.images.length,
+                        hasDescription: !!shopifyDetails.descriptionHtml,
+                    });
+                }
+                else {
+                    logger.warn("No se encontró el producto en Shopify", { searchSku });
+                }
+            }
+            catch (err) {
+                logger.error("Error buscando en Shopify automáticamente", { searchSku, error: err.message });
+            }
+        }
         // 3. Buscar descripción web existente
         // Si hay baseSku, buscar PRIMERO por ese (es el que debería tener la descripción web)
         let webProduct = null;
