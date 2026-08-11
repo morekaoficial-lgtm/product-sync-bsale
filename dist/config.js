@@ -6,9 +6,13 @@ export const config = {
         accessToken: process.env.BSALE_ACCESS_TOKEN || "",
     },
     shopify: {
+        // Tienda principal (Moreka Shop)
         shopDomain: process.env.SHOPIFY_SHOP_DOMAIN || "",
         accessToken: process.env.SHOPIFY_ACCESS_TOKEN || "",
         webhookSecret: process.env.SHOPIFY_WEBHOOK_SECRET || "",
+        // Tienda secundaria (Nebro Shop) - opcional
+        secondaryShopDomain: process.env.SHOPIFY_SECONDARY_SHOP_DOMAIN || "",
+        secondaryAccessToken: process.env.SHOPIFY_SECONDARY_ACCESS_TOKEN || "",
     },
 };
 export function validateConfig() {

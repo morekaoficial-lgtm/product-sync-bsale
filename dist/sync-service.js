@@ -481,5 +481,179 @@ class SyncService {
         addToHistory(result);
         return result;
     }
+    /**
+     * Sincroniza un producto con TODAS sus variantes en UNA sola descripción web.
+     * Útil cuando un producto Shopify tiene múltiples variantes (colores, tallas, etc.)
+     * y se quiere que todas aparezcan juntas en Bsale Web.
+     *
+     * @param skus Array de SKUs de las variantes del mismo producto
+     * @param shopifyDetails Datos del producto desde Shopify (título, descripción, imágenes)
+     */
+    async syncProductWithAllVariants(skus, shopifyDetails) {
+        logger.info("Iniciando sync de producto con múltiples variantes", {
+            skus,
+            title: shopifyDetails.title,
+        });
+        // 1. Buscar TODAS las variantes en Bsale
+        const bsaleVariants = [];
+        for (const sku of skus) {
+            const variant = await bsaleClient.findVariantByCode(sku);
+            if (variant) {
+                bsaleVariants.push({ sku, variant });
+            }
+            else {
+                logger.warn("Variante no encontrada en Bsale, se omite", { sku });
+            }
+        }
+        if (bsaleVariants.length === 0) {
+            const result = {
+                success: false,
+                sku: skus.join(","),
+                message: "Ninguna de las variantes fue encontrada en Bsale",
+            };
+            addToHistory(result);
+            return result;
+        }
+        // 2. Verificar que todas pertenezcan al MISMO productId
+        const productIds = new Set(bsaleVariants.map((v) => v.variant.product?.id || v.variant.productId || v.variant.product_id));
+        if (productIds.size > 1) {
+            logger.warn("Variantes pertenecen a múltiples productos en Bsale", {
+                productIds: Array.from(productIds),
+                skus,
+            });
+            // Usar el productId de la primera variante como principal
+        }
+        const mainProductId = Array.from(productIds)[0];
+        const mainVariant = bsaleVariants[0].variant;
+        // 3. Buscar descripción web existente (por cualquiera de las variantes)
+        let webProduct = null;
+        for (const { sku } of bsaleVariants) {
+            webProduct = await bsaleClient.findWebProductByCode(sku);
+            if (webProduct) {
+                logger.info("Descripción web existente encontrada", { sku, webProductId: webProduct.id });
+                break;
+            }
+        }
+        // 4. Preparar datos
+        const description = shopifyDetails.descriptionHtml || "";
+        const images = shopifyDetails.images || [];
+        const title = shopifyDetails.title || mainVariant.name || skus[0];
+        // 5. Descargar imágenes
+        const localImageUrls = await downloadAndHostProductImages(images, skus[0]);
+        // 6. Construir descripción HTML
+        const richDescription = buildDescriptionWithImages(description, localImageUrls, title);
+        // 7. Construir orderedVariants con TODAS las variantes
+        const orderedVariants = bsaleVariants.map((v, idx) => ({
+            id: Number(v.variant.id),
+            order: idx + 1,
+            show: 1,
+        }));
+        logger.info("Variantes a incluir en descripción web", {
+            count: orderedVariants.length,
+            variantIds: orderedVariants.map((v) => v.id),
+        });
+        // 8. Construir pictures
+        const pictures = localImageUrls.map((url, idx) => ({
+            href: url,
+            legendImage: "",
+            order: idx,
+        }));
+        const numericProductId = Number(mainProductId);
+        const numericVariantId = Number(mainVariant.id);
+        const payload = {
+            productId: numericProductId,
+            idVariantDefault: numericVariantId,
+            name: title,
+            description: richDescription,
+            urlImg: localImageUrls[0] || "",
+            urlVideo: "null",
+            displayNotice: " ",
+            variantShippingAll: 1,
+            order: 1,
+            state: 1,
+            productType: "normal",
+            pictures: pictures,
+            orderedVariants: orderedVariants,
+        };
+        // 9. Crear o actualizar descripción web
+        let result;
+        if (!webProduct) {
+            logger.info("Creando descripción web con múltiples variantes...", {
+                productId: mainProductId,
+                variantCount: orderedVariants.length,
+            });
+            const created = await bsaleClient.createWebProduct(payload);
+            if (!created || created.error) {
+                const errorMsg = created?.message || "Error creando descripción web en Bsale";
+                result = {
+                    success: false,
+                    sku: skus.join(","),
+                    message: `Error creando descripción web: ${errorMsg}`,
+                };
+                addToHistory(result);
+                return result;
+            }
+            if (created.id) {
+                for (const { sku } of bsaleVariants) {
+                    bsaleClient.cacheWebProductId(sku, created.id);
+                }
+            }
+            result = {
+                success: true,
+                sku: skus.join(","),
+                message: `Descripción web creada con ${orderedVariants.length} variantes`,
+                bsaleWebProductId: created.id,
+                created: true,
+            };
+        }
+        else {
+            // Activar si está inactiva
+            if (webProduct.state === 0) {
+                logger.info("Descripción web inactiva, activando...", { webProductId: webProduct.id });
+                await bsaleClient.activateWebProduct(webProduct.id);
+            }
+            logger.info("Actualizando descripción web con múltiples variantes...", {
+                webProductId: webProduct.id,
+                variantCount: orderedVariants.length,
+            });
+            const updated = await bsaleClient.updateWebProduct(webProduct.id, payload);
+            if (!updated) {
+                result = {
+                    success: false,
+                    sku: skus.join(","),
+                    message: "Error actualizando descripción web",
+                };
+                addToHistory(result);
+                return result;
+            }
+            result = {
+                success: true,
+                sku: skus.join(","),
+                message: `Descripción web actualizada con ${orderedVariants.length} variantes`,
+                bsaleWebProductId: webProduct.id,
+                activated: webProduct.state === 0,
+            };
+        }
+        // 10. Asignar a colección
+        const collectionId = findCollectionByProductName(title);
+        const collectionName = collectionId ? getCollectionName(collectionId) : null;
+        if (collectionId) {
+            const existingCollections = await bsaleClient.getProductCollections(numericProductId);
+            const alreadyInCollection = existingCollections.some((c) => c.id === collectionId);
+            if (!alreadyInCollection) {
+                await bsaleClient.addProductToCollection(collectionId, skus[0]);
+                result.collectionId = collectionId;
+                result.collectionName = collectionName;
+                result.collectionAssigned = true;
+            }
+        }
+        for (const { sku } of bsaleVariants) {
+            if (webProduct?.id) {
+                bsaleClient.cacheWebProductId(sku, webProduct.id);
+            }
+        }
+        addToHistory(result);
+        return result;
+    }
 }
 export const syncService = new SyncService();

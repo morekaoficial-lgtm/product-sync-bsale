@@ -128,3 +128,39 @@ router.post("/batch", async (req, res) => {
     }
 });
 export default router;
+/**
+ * POST /sync/merge-variants
+ * Une múltiples variantes del mismo producto en UNA sola descripción web.
+ * Body: { skus: string[], title?: string, descriptionHtml?: string, images?: string[] }
+ *
+ * Ejemplo para audífonos MOREKA BL032:
+ * {
+ *   "skus": ["78500569379655", "78500572964082"],
+ *   "title": "AUDÍFONOS INALÁMBRICOS MOREKA BL032",
+ *   "descriptionHtml": "...",
+ *   "images": ["https://..."]
+ * }
+ */
+router.post("/merge-variants", async (req, res) => {
+    try {
+        const { skus, title, descriptionHtml, images } = req.body;
+        if (!skus || !Array.isArray(skus) || skus.length < 2) {
+            return res.status(400).json({
+                success: false,
+                message: "skus (array de mínimo 2 elementos) es requerido",
+            });
+        }
+        logger.info("Merge variants solicitado", { skus, count: skus.length });
+        const shopifyDetails = {
+            title: title || "",
+            descriptionHtml: descriptionHtml || "",
+            images: images || [],
+        };
+        const result = await syncService.syncProductWithAllVariants(skus, shopifyDetails);
+        res.status(result.success ? 200 : 404).json(result);
+    }
+    catch (error) {
+        logger.error("Error en merge variants", { error: error.message });
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
